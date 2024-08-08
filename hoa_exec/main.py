@@ -6,8 +6,7 @@ from hoa.core import HOA
 from hoa.parsers import HOAParser
 from .stepping import first_match
 
-FNAME = "example.hoa"
-# FNAME = "GFA_and_GFb.hoa"
+FNAME = "GFA_and_GFb.hoa"
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -19,7 +18,6 @@ def main():
     input_string = "\n".join(
         line for line in input_lines
         if not line.startswith("controllable"))
-
     # Read in Strix controllable APs
     control = [x for x in input_lines if x.startswith("controllable")]
     if control:
@@ -50,4 +48,4 @@ def main():
         logging.info(f"Values: {', '.join(pprint_valuation)}")
         cur_state = first_match(hoa_obj, cur_state, valuation)
         logging.info(f"New state: {cur_state}")
-        input()
+        input("Press [Enter] to continue...")
