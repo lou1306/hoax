@@ -26,6 +26,7 @@ def main():
 
     parser = HOAParser()
     hoa_obj: HOA = parser(input_string)
+    conf = DefaultConfig(hoa_obj.header.propositions)
 
     if control:
         pprint = ', '.join(hoa_obj.header.propositions[i] for i in control)
@@ -40,11 +41,11 @@ def main():
     logging.info(f"Initial state: {cur_state}")
     while True:
         cur_state = int2states[cur_state]
-        valuation = random_values(hoa_obj, control)
+        valuation = driver.get()
 
         pprint_valuation = (
             f"{'' if val else '!'}{prop}"
-            for prop, val in zip(hoa_obj.header.propositions, valuation))
+            for prop, val in valuation.items())
         logging.info(f"Values: {', '.join(pprint_valuation)}")
         cur_state = first_match(hoa_obj, cur_state, valuation)
         logging.info(f"New state: {cur_state}")

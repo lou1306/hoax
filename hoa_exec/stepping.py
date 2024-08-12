@@ -29,9 +29,11 @@ def fail(state):
     raise Exception(f"No successor at {state}")
 
 
-def first_match(aut: HOA, state: State, values: list, on_fail=stutter) -> int:
+def first_match(aut: HOA, state: State, values: dict, on_fail=stutter) -> int:
     next_state = state
     found = False
+    # Sort values
+    values = [values[x] for x in aut.header.propositions]
     for edge in aut.body.state2edges[state]:
         if eval(edge.label, values):
             # TODO suport multiple states (alternating automata)
