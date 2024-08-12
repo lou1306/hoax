@@ -10,6 +10,7 @@ default-driver = "user"
 
 [driver.flip]
 aps = ["a"]
+bias = 0.5  # Bias of picking "true" (optional, defaults to 0.5)
 
 [driver.user]
 aps = ["b"]

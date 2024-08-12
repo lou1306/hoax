@@ -40,21 +40,16 @@ class TomlConfigV1(Configuration):
 
     def __init__(self, fname: Path, conf: TOMLDocument, aps: list[str]) -> None:  # noqa: E501
         d = CompositeDriver()
-        print(DRIVERS)
         # If no default driver is given, pick user driver
         default = conf["hoa-exec"].get("default-driver", "user")
         default_driver = DRIVERS[default]
-        aps_left = set(aps)
         for key in DRIVERS:
             if key in conf.get("driver", []):
-                ap_str = [
-                    str(i) if type(i) is String else aps[i]
-                    for i in conf["driver"][key].get("aps",  [])]
-                if ap_str:
-                    d.append(DRIVERS[key](ap_str))
-                    aps_left.difference_update(ap_str)
+                drv = DRIVERS[key].of_toml_v1(aps, conf["driver"][key])
+                d.append(drv)
+        aps_left = [ap for ap in aps if ap not in set(d.aps)]
         if aps_left:
-            d.append(default_driver(list(aps_left)))
+            d.append(default_driver(aps_left))
         self.driver = d
 
     def get_driver(self):
