@@ -3,10 +3,9 @@ from pathlib import Path
 
 import tomlkit
 from tomlkit.exceptions import TOMLKitError
-from tomlkit.items import String
 from tomlkit import TOMLDocument
 
-from .drivers import CompositeDriver, DRIVERS, UserDriver
+from ..drivers import CompositeDriver, DRIVERS, UserDriver
 
 
 class Configuration(ABC):
@@ -22,6 +21,7 @@ class Configuration(ABC):
                 conf = tomlkit.load(conf_file)
             except TOMLKitError as err:
                 raise IOError(err) from None
+            print(conf)
         assert "hoa-exec" in conf, "configuration file missing mandatory element '[hoa-exec]'"  # noqa: E501
         assert "version" in conf['hoa-exec'], "configuration file missing mandatory element '[hoa-exec]version'"  # noqa: E501
         conf_version = conf["hoa-exec"]["version"]

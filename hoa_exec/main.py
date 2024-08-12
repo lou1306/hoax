@@ -8,6 +8,7 @@ from hoa.parsers import HOAParser
 
 from .config import Configuration, DefaultConfig
 from .stepping import first_match
+from .config.config import Configuration, DefaultConfig
 
 app = typer.Typer()
 
