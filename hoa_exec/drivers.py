@@ -1,22 +1,65 @@
+from abc import ABC, abstractmethod
 from io import TextIOWrapper
-from random import choices, choice
-from hoa.core import HOA
+from random import choices
+from typing import Iterable
 from json import loads
 
-def flip():
-    return choice((False, True))
 
+class Driver(ABC):
 
-class Driver:
-    def __init__(self, aps) -> None:
+    def __init__(self, aps: Iterable[str]) -> None:
         self.aps = aps
-        # self.resolvers = {ap: flip for ap in self.aps}
 
-    def get(self):
+    @abstractmethod
+    def get(self) -> dict:
         raise NotImplementedError
 
 
+class CompositeDriver(Driver):
+    def __init__(self) -> None:
+        self.aps = []
+        self.drivers = []
+
+    def append(self, driver: Driver):
+        self.drivers.append(driver)
+        assert all(ap not in self.aps for ap in driver.aps), \
+            "Some APs have multiple drivers: " \
+            f"{[ap for ap in self.aps if ap in driver.aps]}"
+        self.aps.extend(driver.aps)
+
+    def get(self) -> dict:
+        result = {}
+        for d in self.drivers:
+            result |= d.get()
+        return result
+
+
+class UserDriver(Driver):
+    NAME = "user"
+
+    def __init__(self, aps: Iterable[str]) -> None:
+        super().__init__(aps)
+
+    def handle(in_str: str) -> bool:
+        in_str = in_str.strip().lower()
+        try:
+            in_int = int(in_str)
+            return bool(in_int)
+        except ValueError:
+            pass
+        return False if in_str in ('false', 'null', '') else bool(in_str)
+
+    def get(self):
+        result = {}
+        for ap in self.aps:
+            value = handle(input(f"{ap}? "))
+            result[ap] = value
+        return result
+
+
 class RandomDriver(Driver):
+    NAME = "flip"
+
     def __init__(self, aps) -> None:
         super().__init__(aps)
 
@@ -59,8 +102,8 @@ def handle(in_str: str) -> bool:
     return False if in_str in ('false', 'null', '') else bool(in_str)
 
 
-def random_values(aut: HOA, ctrl=None):
-    result = choices((True, False), k=len(aut.header.propositions))
-    for c in (ctrl or []):
-        result[c] = handle(input(f"{aut.header.propositions[c]}?"))
-    return result
+DRIVERS = {
+    cls.NAME: cls
+    for cls in Driver.__subclasses__()
+    if hasattr(cls, "NAME")
+}
