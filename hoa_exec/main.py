@@ -1,20 +1,30 @@
-from pathlib import Path
 import logging
+from pathlib import Path
+from typing import Annotated
 
-from .drivers import random_values
+import typer
 from hoa.core import HOA
 from hoa.parsers import HOAParser
+
+from .config import Configuration, DefaultConfig
 from .stepping import first_match
 
-FNAME = "GFA_and_GFb.hoa"
+app = typer.Typer()
+
 
 logging.getLogger().setLevel(logging.INFO)
 
 
-def main():
-    # Work around Strix extensions to the format
-    logging.info(f"Parsing {FNAME}")
-    input_lines = Path(FNAME).read_text().splitlines()
+@app.command()
+def main(
+        file: Path,
+        config: Annotated[Path, typer.Option(help="Path to a TOML config file")] = None  # noqa: E501
+):
+    """Execute a HOA automaton from FILE"""
+
+    # Work around Strix extensions to the HOA format
+    logging.info(f"Parsing {file}")
+    input_lines = Path(file).read_text().splitlines()
     input_string = "\n".join(
         line for line in input_lines
         if not line.startswith("controllable"))
@@ -26,7 +36,11 @@ def main():
 
     parser = HOAParser()
     hoa_obj: HOA = parser(input_string)
-    conf = DefaultConfig(hoa_obj.header.propositions)
+    conf = (
+        Configuration.factory(Path("config.toml"), hoa_obj.header.propositions)
+        if config is not None
+        else DefaultConfig(hoa_obj.header.propositions))
+    driver = conf.get_driver()
 
     if control:
         pprint = ', '.join(hoa_obj.header.propositions[i] for i in control)
