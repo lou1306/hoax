@@ -46,6 +46,7 @@ def first_match(aut: HOA, state: State, values: dict, on_fail=stutter) -> int:
 
 
 def eval(node, valuation):
+    # TODO support aliases
     def recurse_and_reduce(op):
         return reduce(op, (eval(x, valuation) for x in node.operands))
     if isinstance(node, ast_label.LabelAtom):
