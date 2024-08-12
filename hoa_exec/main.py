@@ -58,8 +58,8 @@ def main(
         valuation = driver.get()
 
         pprint_valuation = (
-            f"{'' if val else '!'}{prop}"
-            for prop, val in valuation.items())
+            f"{'' if valuation[ap] else '!'}{ap}"
+            for ap in hoa_obj.header.propositions)
         logging.info(f"Values: {', '.join(pprint_valuation)}")
         cur_state = first_match(hoa_obj, cur_state, valuation)
         logging.info(f"New state: {cur_state}")
