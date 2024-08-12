@@ -7,6 +7,8 @@ authors = ["Luca Di Stefano <luca.di.stefano@tuwien.ac.at>"]
 [tool.poetry.dependencies]
 python = "^3.10"
 hoa-utils = {git = "https://github.com/lou1306/hoa-utils.git"}
+typer = "^0.12.3"
+tomlkit = "^0.13.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
