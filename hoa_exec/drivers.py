@@ -1,15 +1,18 @@
 from abc import ABC, abstractmethod
 from io import TextIOWrapper
+import logging
 from random import choices
 from typing import Collection, Iterable
 from json import loads
 
 from .config.toml_v1 import TomlV1
 
+log = logging.getLogger(__name__)
 
 
 class Driver(ABC):
     def __init__(self, aps: Iterable[str]) -> None:
+        log.debug(f"Instantiating {type(self).__name__} for {aps=}")
         self.aps = aps
 
     @abstractmethod
@@ -87,6 +90,7 @@ class RandomDriver(Driver):
         result = RandomDriver(cls.extract_aps(all_aps, conf.aps))
         if conf.bias is not None:
             result.cum_weights = (conf.bias, 1)
+        log.debug(f"Instantiating RandomDriver for {result.aps=} with bias={conf.bias}")  # noqa: E501
         return result
 
 

@@ -1,4 +1,5 @@
 import logging
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -11,8 +12,8 @@ from .runners import Automaton, Runner, StopRunner
 
 app = typer.Typer()
 
-
-logging.getLogger().setLevel(logging.INFO)
+log = logging.getLogger(__name__)
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 @app.command()
@@ -23,7 +24,7 @@ def main(
     """Execute a HOA automaton from FILE"""
 
     # Work around Strix extensions to the HOA format
-    logging.info(f"Parsing {file}")
+    log.info(f"Parsing {file}")
     input_lines = Path(file).read_text().splitlines()
     input_string = "\n".join(
         line for line in input_lines
@@ -42,11 +43,12 @@ def main(
         Configuration.factory(config, hoa_obj.header.propositions)
         if config is not None
         else DefaultConfig(hoa_obj.header.propositions))
+
     driver = conf.get_driver()
 
     if control:
         pprint = ', '.join(hoa_obj.header.propositions[i] for i in control)
-        logging.info(f"Found {len(control)} controllable APs: {pprint}")
+        log.info(f"Found {len(control)} controllable APs: {pprint}")
 
     run = Runner(aut=aut, drv=driver)
     run.init()
