@@ -1,64 +1,113 @@
-from functools import reduce
-from operator import and_, or_
+from abc import ABC, abstractmethod
+from random import choice
 
-import hoa.ast.boolean_expression as ast
-import hoa.ast.label as ast_label
-from hoa.core import HOA
-from hoa.parsers import State
+from hoa.core import State, Edge
+
+from .drivers import Driver
+from .hoa import Automaton, Transition
+
+
+class Action(ABC):
+    @abstractmethod
+    def run(self, runner: "Runner") -> None:
+        raise NotImplementedError
+
+
+class Condition(ABC):
+    @abstractmethod
+    def check(self, runner: "Runner"):
+        pass
+
+
+class StopRunner(Exception):
+    pass
 
 
 class Runner:
-    def __init__(self, aut: HOA, s0: State, driver, stepper) -> None:
+    def __init__(self, aut: Automaton, drv: Driver) -> None:
         self.aut = aut
-        self.state = s0
-        self.driver = driver()
-        self.stepper = stepper()
-        self.int2states = {x.index: x for x in aut.body.state2edges}
+        self.aps = list(aut.get_aps())
+        self.driver = drv
+        self.state: State = None
+        self.trace = []
+        self.deadlock_actions: list[Action] = []
+        self.nondet_actions: list[Action] = []
+        self.transition_hooks: list[Hook] = []
+        self.candidates: list[Edge] = []
+
+    def init(self) -> None:
+        self.state = next(iter(self.aut.get_initial_states()))
+        # TODO support initial state conjunction (alternating automata)
+        self.state = next(iter(self.state))
+        self.state = self.aut.int2states[self.state]
 
     def step(self):
-        inputs: dict = self.driver()
-        next_index: int = self.stepper(inputs, self.state)
-        self.state = self.int2states[next_index]
+        values = self.driver.get()
+        self.candidates = list(self.aut.get_candidates(self.state, values))
+        if not self.candidates:
+            for action in self.deadlock_actions:
+                action.run(self)
+        elif len(self.candidates) > 1:
+            for action in self.nondet_actions:
+                action.run(self)
+        if len(self.candidates) == 1:
+            edge = self.candidates[0]
+            next_state_index = next(iter(edge.state_conj))
+            next_state = self.aut.int2states[next_state_index]
+
+            tr = Transition(self.state, edge, next_state, self.aps)
+            self.trace.append(tr)
+            self.state = next_state
+            for hook in self.transition_hooks:
+                hook.run(self)
+        self.candidates = []
 
 
-def stutter(state):
-    return state.index
+class Reach(Condition):
+    def __init__(self, target: State) -> None:
+        self.target = target
+
+    def check(self, runner: Runner):
+        return runner.state.index == self.target
 
 
-def fail(state):
-    raise Exception(f"No successor at {state}")
+class Always(Condition):
+    def check(self, _):
+        return True
 
 
-def first_match(aut: HOA, state: State, values: dict, on_fail=stutter) -> int:
-    next_state = state
-    found = False
-    # Sort values
-    values = [values[x] for x in aut.header.propositions]
-    for edge in aut.body.state2edges[state]:
-        if eval(edge.label, values):
-            # TODO suport multiple states (alternating automata)
-            found = True
-            next_state = next(iter(edge.state_conj))
-            break
-    if not found:
-        next_state = on_fail(state)
-    return next_state
+class Hook:
+    def __init__(self, condition: Condition, action: Action) -> None:
+        self.condition = condition
+        self.action = action
+
+    def run(self, runner: Runner):
+        if self.condition.check(runner):
+            self.action.run(runner)
 
 
-def eval(node, valuation):
-    # TODO support aliases
-    def recurse_and_reduce(op):
-        return reduce(op, (eval(x, valuation) for x in node.operands))
-    if isinstance(node, ast_label.LabelAtom):
-        return valuation[node.proposition]
-    if isinstance(node, ast.FalseFormula):
-        return False
-    if isinstance(node, ast.TrueFormula):
-        return False
-    if isinstance(node, ast.And):
-        return recurse_and_reduce(and_)
-    if isinstance(node, ast.Or):
-        return recurse_and_reduce(or_)
-    if isinstance(node, ast.Not):
-        return not eval(node.argument, valuation)
-    raise Exception(f"Unexpected node {node}")
+class Reset(Action):
+    def run(self, runner: Runner) -> None:
+        runner.init()
+
+
+class Log(Action):
+    def run(self, runner: Runner) -> None:
+        tr = runner.trace[-1] if runner.trace else None
+        if tr is not None:
+            print(str(tr))
+
+
+class PressEnter(Action):
+    def run(self, _) -> None:
+        input("Press [Enter] to continue...")
+
+
+class RandomChoice(Action):
+    def run(self, runner: Runner) -> None:
+        runner.candidates = [choice(runner.candidates)]
+
+
+class Quit(Action):
+    def run(self, runner: Runner) -> None:
+        raise StopRunner()

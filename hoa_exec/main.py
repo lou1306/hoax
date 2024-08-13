@@ -6,9 +6,8 @@ import typer
 from hoa.core import HOA
 from hoa.parsers import HOAParser
 
-from .config import Configuration, DefaultConfig
-from .stepping import first_match
 from .config.config import Configuration, DefaultConfig
+from .runners import Automaton, Runner, StopRunner
 
 app = typer.Typer()
 
@@ -37,6 +36,8 @@ def main(
 
     parser = HOAParser()
     hoa_obj: HOA = parser(input_string)
+    aut = Automaton(hoa_obj)
+
     conf = (
         Configuration.factory(config, hoa_obj.header.propositions)
         if config is not None
@@ -47,21 +48,13 @@ def main(
         pprint = ', '.join(hoa_obj.header.propositions[i] for i in control)
         logging.info(f"Found {len(control)} controllable APs: {pprint}")
 
-    int2states = {x.index: x for x in hoa_obj.body.state2edges}
+    run = Runner(aut=aut, drv=driver)
+    run.init()
 
-    # TODO support multiple initial states
-    cur_state = next(iter(hoa_obj.header.start_states))
-    # TODO support initial state conjunction (alternating automata)
-    cur_state = next(iter(cur_state))
-    logging.info(f"Initial state: {cur_state}")
     while True:
-        cur_state = int2states[cur_state]
-        valuation = driver.get()
-
-        pprint_valuation = (
-            f"{'' if valuation[ap] else '!'}{ap}"
-            for ap in hoa_obj.header.propositions)
-        logging.info(f"Values: {', '.join(pprint_valuation)}")
-        cur_state = first_match(hoa_obj, cur_state, valuation)
-        logging.info(f"New state: {cur_state}")
-        input("Press [Enter] to continue...")
+        try:
+            run.step()
+        except (StopRunner, KeyboardInterrupt):
+            for t in run.trace:
+                print(t)
+            break
