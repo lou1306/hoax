@@ -53,7 +53,7 @@ class TomlConfigV1(Configuration):
 
     def __init__(self, fname: Path, conf: TomlV1, aut: Automaton) -> None:
         logging.getLogger().setLevel({
-            "debuf": logging.DEBUG,
+            "debug": logging.DEBUG,
             "info": logging.INFO,
             "error": logging.ERROR,
             "none": logging.FATAL
