@@ -50,7 +50,7 @@ class Runner:
         elif len(self.candidates) > 1:
             for action in self.nondet_actions:
                 action.run(self)
-        if len(self.candidates) == 1:
+        if len(self.candidates) >= 1:
             edge = self.candidates[0]
             next_state_index = next(iter(edge.state_conj))
             next_state = self.aut.int2states[next_state_index]
