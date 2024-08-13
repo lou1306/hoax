@@ -1,0 +1,16 @@
+HOA: v1
+name: "Nondet"
+States: 2
+Start: 0
+acc-name: all
+Acceptance: 0 t
+AP: 1 "b"
+--BODY--
+State: 0
+[0]  0
+[!0] 0
+[!0] 1
+State: 1
+[0] 1
+[!0] 0
+--END--
