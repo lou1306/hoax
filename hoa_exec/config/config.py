@@ -1,11 +1,15 @@
 from abc import ABC
 from pathlib import Path
 
-import tomlkit
-from tomlkit.exceptions import TOMLKitError
-from tomlkit import TOMLDocument
+import msgspec
+import tomli
 
-from ..drivers import CompositeDriver, DRIVERS, UserDriver
+from ..drivers import CompositeDriver, RandomDriver, UserDriver
+from .toml_v1 import TomlV1
+
+
+class ConfigurationError(Exception):
+    pass
 
 
 class Configuration(ABC):
@@ -15,20 +19,20 @@ class Configuration(ABC):
     @staticmethod
     def factory(fname: Path, aps: list):
         if fname.suffix != ".toml":
-            raise NotImplementedError(f"Unsupported config format {fname.suffix}.")  # noqa: E501
-        with open("config.toml") as conf_file:
+            raise NotImplementedError(f"Unsupported config format {fname.suffix}")  # noqa: E501
+        with open(fname, "rb") as conf_file:
             try:
-                conf = tomlkit.load(conf_file)
-            except TOMLKitError as err:
-                raise IOError(err) from None
-            print(conf)
-        assert "hoa-exec" in conf, "configuration file missing mandatory element '[hoa-exec]'"  # noqa: E501
-        assert "version" in conf['hoa-exec'], "configuration file missing mandatory element '[hoa-exec]version'"  # noqa: E501
-        conf_version = conf["hoa-exec"]["version"]
-        assert conf_version == 1, f"unsupported configuration version: {conf_version}"  # noqa: E501
-        if conf_version == 1:
-            return TomlConfigV1(fname, conf, aps)
-        raise Exception("???")
+                toml = tomli.load(conf_file)
+                assert "hoa-exec" in toml, "Missing mandatory section [hoa-exec]"  # noqa: E501
+                assert "version" in toml["hoa-exec"], "Missing mandatory field [hoa-exec].version"  # noqa: E501
+                conf_version = toml["hoa-exec"]["version"]
+                if conf_version == 1:
+                    conf = msgspec.convert(toml, type=TomlV1)
+                    return TomlConfigV1(fname, conf, aps)
+                else:
+                    raise ConfigurationError(f"Unsupported version {conf_version}")  # noqa: E501
+            except (AssertionError, tomli.TOMLDecodeError, msgspec.ValidationError) as err:  # noqa: E501
+                raise ConfigurationError(err) from None
 
 
 class DefaultConfig(Configuration):
@@ -37,16 +41,18 @@ class DefaultConfig(Configuration):
 
 
 class TomlConfigV1(Configuration):
+    DRIVERS = {"flip": RandomDriver, "user": UserDriver}
 
-    def __init__(self, fname: Path, conf: TOMLDocument, aps: list[str]) -> None:  # noqa: E501
+    def __init__(self, fname: Path, conf: TomlV1, aps: list[str]) -> None:
+        self.fname = fname
         d = CompositeDriver()
-        # If no default driver is given, pick user driver
-        default = conf["hoa-exec"].get("default-driver", "user")
-        default_driver = DRIVERS[default]
-        for key in DRIVERS:
-            if key in conf.get("driver", []):
-                drv = DRIVERS[key].of_toml_v1(aps, conf["driver"][key])
-                d.append(drv)
+        default_driver = self.DRIVERS[conf.hoa_exec.default_driver]
+        for drv_conf in conf.driver.flip:
+            drv = RandomDriver.of_toml_v1(aps, drv_conf)
+            d.append(drv)
+        for drv_conf in conf.driver.user:
+            drv = UserDriver.of_toml_v1(aps, drv_conf)
+            d.append(drv)
         aps_left = [ap for ap in aps if ap not in set(d.aps)]
         if aps_left:
             d.append(default_driver(aps_left))

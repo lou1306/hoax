@@ -38,7 +38,7 @@ def main(
     parser = HOAParser()
     hoa_obj: HOA = parser(input_string)
     conf = (
-        Configuration.factory(Path("config.toml"), hoa_obj.header.propositions)
+        Configuration.factory(config, hoa_obj.header.propositions)
         if config is not None
         else DefaultConfig(hoa_obj.header.propositions))
     driver = conf.get_driver()

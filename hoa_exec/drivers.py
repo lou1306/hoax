@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from io import TextIOWrapper
 from random import choices
-from typing import Iterable
+from typing import Collection, Iterable
 from json import loads
-from tomlkit import TOMLDocument
-from tomlkit.items import String
+
+from .config.toml_v1 import TomlV1
+
 
 
 class Driver(ABC):
@@ -16,13 +17,12 @@ class Driver(ABC):
         raise NotImplementedError
 
     @classmethod
-    def of_toml_v1(cls, all_aps: Iterable[str], conf: TOMLDocument):
+    def of_toml_v1(cls, all_aps: Iterable[str], conf):
         raise NotImplementedError
 
     @staticmethod
-    def extract_aps(all_aps: Iterable[str], conf: TOMLDocument):
-        assert "aps" in conf, "Missing mandatory field: ap"
-        return [str(i) if type(i) is String else all_aps[i] for i in conf["aps"]]  # noqa: E501
+    def extract_aps(all_aps: Iterable[str], aps: Collection[str | int]):
+        return [i if type(i) is str else all_aps[i] for i in aps]
 
 
 class CompositeDriver(Driver):
@@ -45,8 +45,6 @@ class CompositeDriver(Driver):
 
 
 class UserDriver(Driver):
-    NAME = "user"
-
     def __init__(self, aps: Iterable[str]) -> None:
         super().__init__(aps)
 
@@ -67,17 +65,16 @@ class UserDriver(Driver):
         return result
 
     @classmethod
-    def of_toml_v1(cls, all_aps: Iterable[str], conf: TOMLDocument):
-        aps = cls.extract_aps(all_aps, conf)
+    def of_toml_v1(cls, all_aps: Iterable[str], conf: TomlV1.DriverSection.UserDriver):  # noqa: E501
+        aps = cls.extract_aps(all_aps, conf.aps)
         return UserDriver(aps)
 
 
 class RandomDriver(Driver):
-    NAME = "flip"
     pop = True, False
 
     def __init__(self, aps) -> None:
-        super().__init__(aps)
+        self.aps = aps
         self.k = len(self.aps)
         self.cum_weights = None
 
@@ -86,11 +83,10 @@ class RandomDriver(Driver):
         return {ap: value for ap, value in zip(self.aps, result)}
 
     @classmethod
-    def of_toml_v1(cls, all_aps: Iterable[str], conf: TOMLDocument):
-        result = RandomDriver(cls.extract_aps(all_aps, conf))
-        if "bias" in conf:
-            assert 0 <= conf["bias"] <= 1, "[driver.flip] bias must be between 0 and 1"  # noqa: E501
-            result.cum_weights = (conf["bias"], 1)
+    def of_toml_v1(cls, all_aps: Iterable[str], conf: TomlV1.DriverSection.RandomDriver):  # noqa: E501
+        result = RandomDriver(cls.extract_aps(all_aps, conf.aps))
+        if conf.bias is not None:
+            result.cum_weights = (conf.bias, 1)
         return result
 
 
@@ -126,10 +122,3 @@ def handle(in_str: str) -> bool:
     except ValueError:
         pass
     return False if in_str in ('false', 'null', '') else bool(in_str)
-
-
-DRIVERS = {
-    cls.NAME: cls
-    for cls in Driver.__subclasses__()
-    if hasattr(cls, "NAME")
-}
