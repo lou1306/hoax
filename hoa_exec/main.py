@@ -8,13 +8,12 @@ from hoa.core import HOA
 from hoa.parsers import HOAParser
 
 from .config.config import Configuration, DefaultConfig
-from .runners import Automaton, Runner, StopRunner
+from .runners import Automaton, StopRunner
 
 app = typer.Typer()
 
 log = logging.getLogger(__name__)
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 @app.command()
 def main(
@@ -24,7 +23,6 @@ def main(
     """Execute a HOA automaton from FILE"""
 
     # Work around Strix extensions to the HOA format
-    log.info(f"Parsing {file}")
     input_lines = Path(file).read_text().splitlines()
     input_string = "\n".join(
         line for line in input_lines
@@ -40,23 +38,22 @@ def main(
     aut = Automaton(hoa_obj)
 
     conf = (
-        Configuration.factory(config, hoa_obj.header.propositions)
+        Configuration.factory(config, aut)
         if config is not None
-        else DefaultConfig(hoa_obj.header.propositions))
-
-    driver = conf.get_driver()
+        else DefaultConfig(aut))
 
     if control:
         pprint = ', '.join(hoa_obj.header.propositions[i] for i in control)
         log.info(f"Found {len(control)} controllable APs: {pprint}")
 
-    run = Runner(aut=aut, drv=driver)
+    run = conf.get_runner()
     run.init()
 
     while True:
         try:
             run.step()
         except (StopRunner, KeyboardInterrupt):
+            print()
             log.debug("Stopping")
             log.debug("Printing trace:")
             for t in run.trace:

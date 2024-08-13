@@ -1,10 +1,13 @@
 from abc import ABC
 from pathlib import Path
+import logging
 
 import msgspec
 import tomli
 
-from ..drivers import CompositeDriver, RandomDriver, UserDriver
+from ..hoa import Automaton
+from ..drivers import CompositeDriver, RandomDriver, UserDriver, Driver
+from ..runners import Bound, Hook, Log, Quit, RandomChoice, Runner, UserChoice
 from .toml_v1 import TomlV1
 
 
@@ -13,11 +16,14 @@ class ConfigurationError(Exception):
 
 
 class Configuration(ABC):
-    def get_driver(self):
+    def get_driver(self) -> Driver:
         return self.driver
 
+    def get_runner(self) -> Runner:
+        return self.runner
+
     @staticmethod
-    def factory(fname: Path, aps: list):
+    def factory(fname: Path, aut: Automaton):
         if fname.suffix != ".toml":
             raise NotImplementedError(f"Unsupported config format {fname.suffix}")  # noqa: E501
         with open(fname, "rb") as conf_file:
@@ -28,7 +34,7 @@ class Configuration(ABC):
                 conf_version = toml["hoa-exec"]["version"]
                 if conf_version == 1:
                     conf = msgspec.convert(toml, type=TomlV1)
-                    return TomlConfigV1(fname, conf, aps)
+                    return TomlConfigV1(fname, conf, aut)
                 else:
                     raise ConfigurationError(f"Unsupported version {conf_version}")  # noqa: E501
             except (AssertionError, tomli.TOMLDecodeError, msgspec.ValidationError) as err:  # noqa: E501
@@ -36,15 +42,25 @@ class Configuration(ABC):
 
 
 class DefaultConfig(Configuration):
-    def __init__(self, aps: list[str]) -> None:
-        self.driver = UserDriver(aps)
+    def __init__(self, aut: Automaton) -> None:
+        self.driver = UserDriver(list(aut.get_aps()))
+        self.runner = Runner(aut=aut, drv=self.driver)
+        self.runner.nondet_actions.append(UserChoice())
 
 
 class TomlConfigV1(Configuration):
     DRIVERS = {"flip": RandomDriver, "user": UserDriver}
 
-    def __init__(self, fname: Path, conf: TomlV1, aps: list[str]) -> None:
+    def __init__(self, fname: Path, conf: TomlV1, aut: Automaton) -> None:
+        logging.getLogger().setLevel({
+            "debuf": logging.DEBUG,
+            "info": logging.INFO,
+            "error": logging.ERROR,
+            "none": logging.FATAL
+             }.get(conf.hoa_exec.log_level, "none"))
+
         self.fname = fname
+        aps = list(aut.get_aps())
         d = CompositeDriver()
         default_driver = self.DRIVERS[conf.hoa_exec.default_driver]
         for drv_conf in conf.driver.flip:
@@ -57,6 +73,14 @@ class TomlConfigV1(Configuration):
         if aps_left:
             d.append(default_driver(aps_left))
         self.driver = d
+        self.runner = Runner(aut, d)
+        if conf.runner.nondet == "user":
+            self.runner.nondet_actions.append(UserChoice())
+        elif conf.runner.nondet == "random":
+            self.runner.nondet_actions.append(RandomChoice())
+        if conf.runner.bound:
+            self.runner.transition_hooks.append(
+                Hook(Bound(conf.runner.bound), Quit()))
 
     def get_driver(self):
         return self.driver
