@@ -57,6 +57,8 @@ def main(
         try:
             run.step()
         except (StopRunner, KeyboardInterrupt):
+            log.debug("Stopping")
+            log.debug("Printing trace:")
             for t in run.trace:
                 print(t)
             break
