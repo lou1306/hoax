@@ -1,3 +1,4 @@
+from abc import ABC
 from dataclasses import dataclass
 from functools import reduce
 from operator import and_, or_
@@ -32,14 +33,26 @@ def fmt_expr(node, aps: list[str]):
 
 
 @dataclass(frozen=True)
-class Transition:
+class AbstractTransition(ABC):
     src: State
-    edge: Edge
     tgt: State
+
+
+@dataclass(frozen=True)
+class Transition(AbstractTransition):
+    edge: Edge
     aps: list[str]
 
     def __str__(self) -> str:
         return f"{fmt_state(self.src)} -- {fmt_expr(self.edge.label, self.aps)} --> {fmt_state(self.tgt)}"  # noqa: E501
+
+
+@dataclass(frozen=True)
+class ForcedTransition(AbstractTransition):
+    label: str
+
+    def __str__(self) -> str:
+        return f"{fmt_state(self.src)} -- {self.label} --> {fmt_state(self.tgt)}"  # noqa: E501
 
 
 class Automaton:

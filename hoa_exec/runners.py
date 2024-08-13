@@ -55,7 +55,7 @@ class Runner:
             next_state_index = next(iter(edge.state_conj))
             next_state = self.aut.int2states[next_state_index]
 
-            tr = Transition(self.state, edge, next_state, self.aps)
+            tr = Transition(self.state, next_state, edge, self.aps)
             self.trace.append(tr)
             self.state = next_state
             for hook in self.transition_hooks:
