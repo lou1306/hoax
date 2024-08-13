@@ -5,12 +5,13 @@ name = "My hoa-exec config"
 # Config file version (mandatory)
 version = 1
 
-# Driver to use when an AP has not been given any driver
+# Driver to use when an AP has not been given any driver (defaults to user)
 default-driver = "user"
 
 [[driver.flip]]
 aps = ["a"]
 bias = 0.5  # Bias of picking "true" (optional, defaults to 0.5)
 
-[[driver.user]]
+[[driver.flip]]
 aps = ["b"]
+

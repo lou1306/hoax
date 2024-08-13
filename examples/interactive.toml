@@ -1,0 +1,9 @@
+[hoa-exec]
+name = "Interactive hoa-exec config"
+version = 1
+default-driver = "user"
+log-level = "info"
+
+[runner]
+# what to do in case of nondeterminism ("random", "user" or "first")
+nondet = "user"

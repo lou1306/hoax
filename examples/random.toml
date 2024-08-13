@@ -1,0 +1,11 @@
+[hoa-exec]
+name = "Random hoa-exec config"
+version = 1
+default-driver = "flip"
+log-level = "info"
+
+[runner]
+# what to do in case of nondeterminism ("random", "user" or "first")
+nondet = "random"
+# Optional simulation bound (if not set, stop with Ctrl-C)
+bound = 500
