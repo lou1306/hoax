@@ -5,7 +5,7 @@ from random import choice
 from hoa.core import State, Edge
 
 from .drivers import Driver
-from .hoa import Automaton, ForcedTransition, Transition, fmt_expr, fmt_state
+from .hoa import Automaton, ForcedTransition, Transition, fmt_edge, fmt_state
 
 log = logging.getLogger(__name__)
 
@@ -136,23 +136,20 @@ class PressEnter(Action):
 class RandomChoice(Action):
     def run(self, runner: Runner) -> None:
         chosen = choice(runner.candidates)
-        lbl = fmt_expr(chosen.label, runner.aps)
-        log.debug(f"Randomly picked {lbl} --> {chosen.state_conj}")
+        log.debug(f"Randomly picked {fmt_edge(chosen, runner.aps)}")
         runner.candidates = [chosen]
 
 
 class UserChoice(Action):
     def run(self, runner: Runner) -> None:
         for i, edge in enumerate(runner.candidates):
-            lbl = fmt_expr(edge.label, runner.aps)
-            print(f"[{i}]\t{lbl} --> {edge.state_conj}")
+            print(f"[{i}]\t{fmt_edge(edge, runner.aps)}")
         choice = -1
         while not 0 <= choice < len(runner.candidates):
             choice = input("Choose a transition from above: ")
             choice = int(choice) if choice.isdecimal() else -1
         chosen = runner.candidates[choice]
-        lbl = fmt_expr(chosen.label, runner.aps)
-        log.debug(f"User picked {lbl} --> {chosen.state_conj}")
+        log.debug(f"User picked {fmt_edge(chosen, runner.aps)}")
         runner.candidates = [chosen]
 
 
