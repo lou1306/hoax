@@ -14,6 +14,10 @@ def fmt_state(s: State) -> str:
     return str(s.index)
 
 
+def fmt_edge(e: Edge, aps: list[str]) -> str:
+    lbl = fmt_expr(e.label, aps)
+    tgt = ' '.join(str(i) for i in e.state_conj)
+    return f"{lbl} --> {tgt}"
 def fmt_expr(node, aps: list[str]):
     def recurse_and_reduce(op: str):
         return op.join(fmt_expr(x, aps) for x in node.operands)
