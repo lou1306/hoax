@@ -2,6 +2,7 @@ from abc import ABC
 from dataclasses import dataclass
 from functools import reduce
 from operator import and_, or_
+from typing import Collection, Iterable
 
 import hoa.ast.boolean_expression as ast
 import hoa.ast.label as ast_label
@@ -18,6 +19,12 @@ def fmt_edge(e: Edge, aps: list[str]) -> str:
     lbl = fmt_expr(e.label, aps)
     tgt = ' '.join(str(i) for i in e.state_conj)
     return f"{lbl} --> {tgt}"
+
+
+def extract_aps(all_aps: Iterable[str], aps: Collection[str | int]):
+    return [i if type(i) is str else all_aps[i] for i in aps]
+
+
 def fmt_expr(node, aps: list[str]):
     def recurse_and_reduce(op: str):
         return op.join(fmt_expr(x, aps) for x in node.operands)

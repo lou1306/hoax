@@ -1,14 +1,13 @@
 from abc import ABC
 from pathlib import Path
 import logging
-import sys
 
 import msgspec
 import tomli
 
 from ..hoa import Automaton
-from ..drivers import CompositeDriver, RandomDriver, UserDriver, Driver
-from ..runners import Bound, Hook, Log, Quit, RandomChoice, Runner, UserChoice
+from ..drivers import CompositeDriver, UserDriver, Driver
+from ..runners import Bound, Hook, Quit, Runner, UserChoice
 from .toml_v1 import TomlV1
 
 
@@ -50,48 +49,30 @@ class DefaultConfig(Configuration):
 
 
 class TomlConfigV1(Configuration):
-    DRIVERS = {"flip": RandomDriver, "user": UserDriver}
-
-    def handle_log_section(self, log_conf: TomlV1.LogSection) -> None:
-        handler = (
-            logging.StreamHandler(sys.stdout)
-            if log_conf.name is None
-            else logging.FileHandler(log_conf.name))
-        handler.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
-        handler.setLevel({
-            "debug": logging.DEBUG,
-            "info": logging.INFO,
-            "warning": logging.WARNING,
-            "error": logging.ERROR,
-            "none": logging.FATAL
-             }.get(log_conf.level, "info"))
-        logging.getLogger().addHandler(handler)
 
     def __init__(self, fname: Path, conf: TomlV1, aut: Automaton) -> None:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.getLogger().handlers.clear()
         for log_conf in conf.log:
-            self.handle_log_section(log_conf)
-
+            logging.getLogger().addHandler(log_conf.get_handler())
         self.fname = fname
         aps = list(aut.get_aps())
         d = CompositeDriver()
-        default_driver = self.DRIVERS[conf.hoa_exec.default_driver]
-        for drv_conf in conf.driver.flip:
-            drv = RandomDriver.of_toml_v1(aps, drv_conf)
+
+        for drv_conf in conf.drivers():
+            drv = drv_conf.get_driver(aps)
             d.append(drv)
-        for drv_conf in conf.driver.user:
-            drv = UserDriver.of_toml_v1(aps, drv_conf)
-            d.append(drv)
+
         aps_left = [ap for ap in aps if ap not in set(d.aps)]
         if aps_left:
+            default_driver = conf.hoa_exec.get_default_driver()
             d.append(default_driver(aps_left))
         self.driver = d
         self.runner = Runner(aut, d)
-        if conf.runner.nondet == "user":
-            self.runner.nondet_actions.append(UserChoice())
-        elif conf.runner.nondet == "random":
-            self.runner.nondet_actions.append(RandomChoice())
+
+        nondet_action = conf.runner.get_nondet()
+        if nondet_action is not None:
+            self.runner.nondet_actions.append(nondet_action)
         if conf.runner.bound:
             self.runner.transition_hooks.append(
                 Hook(Bound(conf.runner.bound), Quit()))
