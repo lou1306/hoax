@@ -1,8 +1,8 @@
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
 from random import choice
 
-from hoa.core import State, Edge
+from hoa.core import Edge, State
 
 from .drivers import Driver
 from .hoa import Automaton, ForcedTransition, Transition, fmt_edge, fmt_state
