@@ -10,19 +10,25 @@ def invalid(field: str, valid: Collection[str]):
 
 class TomlV1(Struct):
 
-    class HoaExec(Struct):
+    class HoaExecSection(Struct):
         DRIVERS = "flip", "user"
-        LOG_LEVELS = "none", "error", "info", "debug"
         version: Annotated[int, Meta(ge=1, le=1)]
         name: Optional[str] = None
         default_driver: Optional[str] = field(name="default-driver", default="user")  # noqa: E501
-        log_level: Optional[str] = field(name="log-level", default="info")  # noqa: E501
 
         def __post_init__(self):
             if self.default_driver not in self.DRIVERS:
                 invalid("default-driver", self.DRIVERS)
-            if self.log_level not in self.LOG_LEVELS:
-                invalid("log-level", self.LOG_LEVELS)
+
+    class LogSection(Struct):
+        LOG_LEVELS = "none", "error", "warning", "info", "debug"
+        name: Optional[str] = None
+        level: Optional[str] = field(default="info")
+        level_obj: int = field(init=False)
+
+        def __post_init__(self):
+            if self.level not in self.LOG_LEVELS:
+                invalid("level", self.LOG_LEVELS)
 
     class DriverSection(Struct):
         class RandomDriver(Struct):
@@ -45,6 +51,7 @@ class TomlV1(Struct):
             if self.nondet not in self.NONDET_VALUES:
                 invalid("nondet", self.NONDET_VALUES)
 
-    hoa_exec: HoaExec = field(name="hoa-exec")
+    hoa_exec: HoaExecSection = field(name="hoa-exec")
     driver: DriverSection = field(default_factory=DriverSection)
     runner: RunnerSection = field(default_factory=RunnerSection)
+    log: list[LogSection] = field(default_factory=list)

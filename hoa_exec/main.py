@@ -15,6 +15,7 @@ app = typer.Typer()
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
+
 @app.command()
 def main(
         file: Path,

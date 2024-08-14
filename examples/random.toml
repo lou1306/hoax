@@ -2,7 +2,14 @@
 name = "Random hoa-exec config"
 version = 1
 default-driver = "flip"
-log-level = "info"
+
+[[log]]
+# name is optional; if omitted the log goes to stdout
+level = "info"
+
+[[log]]
+name = "debug.log"
+level = "debug"
 
 [runner]
 # what to do in case of nondeterminism ("random", "user" or "first")

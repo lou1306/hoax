@@ -1,6 +1,7 @@
 from abc import ABC
 from pathlib import Path
 import logging
+import sys
 
 import msgspec
 import tomli
@@ -25,7 +26,7 @@ class Configuration(ABC):
     @staticmethod
     def factory(fname: Path, aut: Automaton):
         if fname.suffix != ".toml":
-            raise NotImplementedError(f"Unsupported config format {fname.suffix}")  # noqa: E501
+            raise ConfigurationError(f"Unsupported config format {fname.suffix}")  # noqa: E501
         with open(fname, "rb") as conf_file:
             try:
                 toml = tomli.load(conf_file)
@@ -51,13 +52,26 @@ class DefaultConfig(Configuration):
 class TomlConfigV1(Configuration):
     DRIVERS = {"flip": RandomDriver, "user": UserDriver}
 
-    def __init__(self, fname: Path, conf: TomlV1, aut: Automaton) -> None:
-        logging.getLogger().setLevel({
+    def handle_log_section(self, log_conf: TomlV1.LogSection) -> None:
+        handler = (
+            logging.StreamHandler(sys.stdout)
+            if log_conf.name is None
+            else logging.FileHandler(log_conf.name))
+        handler.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
+        handler.setLevel({
             "debug": logging.DEBUG,
             "info": logging.INFO,
+            "warning": logging.WARNING,
             "error": logging.ERROR,
             "none": logging.FATAL
-             }.get(conf.hoa_exec.log_level, "none"))
+             }.get(log_conf.level, "info"))
+        logging.getLogger().addHandler(handler)
+
+    def __init__(self, fname: Path, conf: TomlV1, aut: Automaton) -> None:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger().handlers.clear()
+        for log_conf in conf.log:
+            self.handle_log_section(log_conf)
 
         self.fname = fname
         aps = list(aut.get_aps())
