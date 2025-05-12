@@ -48,6 +48,10 @@ class Runner(ABC):
     def add_nondet_action(self, action):
         raise NotImplementedError
 
+    @abstractmethod
+    def add_deadlock_action(self, action):
+        raise NotImplementedError
+
 
 class CompositeRunner(Runner):
     def __init__(self, automata: Sequence[Automaton], drv: Driver) -> None:
@@ -72,6 +76,10 @@ class CompositeRunner(Runner):
     def add_nondet_action(self, action):
         for runner in self.runners:
             runner.add_nondet_action(action)
+
+    def add_deadlock_action(self, action):
+        for runner in self.runners:
+            runner.add_deadlock_action(action)
 
 
 class SingleRunner(Runner):
@@ -100,6 +108,9 @@ class SingleRunner(Runner):
 
     def add_nondet_action(self, action):
         self.nondet_actions.append(action)
+
+    def add_deadlock_action(self, action):
+        self.deadlock_actions.append(action)
 
     def step(self, inputs: Optional[dict] = None) -> list[Transition]:
         """return False iff automaton stuttered"""
