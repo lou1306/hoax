@@ -1,5 +1,5 @@
 import sys
-from concurrent.futures import ThreadPoolExecutor)
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from signal import SIG_DFL, SIGPIPE, signal
@@ -49,6 +49,7 @@ def main(
 
     run = conf.get_runner()
 
+    t = datetime.now()
     run.init()
     try:
         while True:
