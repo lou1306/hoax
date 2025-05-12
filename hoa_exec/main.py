@@ -1,62 +1,59 @@
-import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor)
+from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from signal import SIG_DFL, SIGPIPE, signal
+from typing import Annotated, Optional
 
 import typer
-from hoa.core import HOA
-from hoa.parsers import HOAParser
 
+from . import __version__
 from .config.config import Configuration, DefaultConfig
-from .runners import Automaton, StopRunner
+from .drivers import EndOfFiniteTrace
+from .hoa import parse
+from .runners import StopRunner
+
+signal(SIGPIPE, SIG_DFL)
 
 app = typer.Typer()
 
-log = logging.getLogger(__name__)
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
+def print_version(version: bool):
+    if version:
+        print(f"hoa_exec {__version__}")
+        raise typer.Exit()
 
 
 @app.command()
 def main(
-        file: Path,
-        config: Annotated[Path, typer.Option(help="Path to a TOML config file")] = None  # noqa: E501
+        files: list[Path],
+        config: Annotated[
+            Optional[Path],
+            typer.Option(help="Path to a TOML config file.")] = None,
+        version: Annotated[
+            Optional[bool],
+            typer.Option(
+                "--version",
+                help="Print version number and exit.",
+                callback=print_version, is_eager=True)] = None,
 ):
-    """Execute a HOA automaton from FILE"""
+    """Execute HOA automata"""
 
-    # Work around Strix extensions to the HOA format
-    input_lines = Path(file).read_text().splitlines()
-    input_string = "\n".join(
-        line for line in input_lines
-        if not line.startswith("controllable"))
-    # Read in Strix controllable APs
-    control = [x for x in input_lines if x.startswith("controllable")]
-    if control:
-        control = control[0].split(":")[1].split()
-        control = sorted(set(int(x) for x in control))
-
-    parser = HOAParser()
-    hoa_obj: HOA = parser(input_string)
-    aut = Automaton(hoa_obj)
+    with ThreadPoolExecutor() as exc:
+        automata = list(exc.map(parse, files))
 
     conf = (
-        Configuration.factory(config, aut)
+        Configuration.factory(config, automata)
         if config is not None
-        else DefaultConfig(aut))
-
-    if control:
-        pprint = ', '.join(hoa_obj.header.propositions[i] for i in control)
-        log.info(f"Found {len(control)} controllable APs: {pprint}")
+        else DefaultConfig(automata))
 
     run = conf.get_runner()
-    run.init()
 
-    while True:
-        try:
+    run.init()
+    try:
+        while True:
             run.step()
-        except (StopRunner, KeyboardInterrupt):
-            print()
-            log.debug("Stopping")
-            log.debug("Printing trace:")
-            for t in run.trace:
-                print(t)
-            break
+    except (StopRunner, KeyboardInterrupt, EndOfFiniteTrace) as e:
+        # log.debug(f"Stopping due to {e}")
+        print(f"Stopping due to {repr(e)}", file=sys.stderr)
+    print(run.count, "steps,", datetime.now() - t, "seconds", file=sys.stderr)
