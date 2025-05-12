@@ -17,7 +17,11 @@ def invalid(field: str, valid: Collection[str]):
 class TomlV1(Struct):
 
     class HoaExecSection(Struct):
-        DRIVERS = {"flip": drivers.RandomDriver, "user": drivers.UserDriver}
+        DRIVERS = {
+            "flip": drivers.RandomDriver,
+            "user": drivers.UserDriver,
+            "json": drivers.JSONDriver,
+            "txt": drivers.SimpleTxtDriver}
 
         version: Annotated[int, Meta(ge=1, le=1)]
         name: Optional[str] = None
@@ -74,8 +78,28 @@ class TomlV1(Struct):
             def get_driver(self, aps) -> drivers.UserDriver:
                 return drivers.UserDriver(extract_aps(aps, self.aps))
 
+        class JSONDriver(Struct):
+            aps: set[str | int]
+            filename: str
+
+            def get_driver(self, aps) -> drivers.JSONDriver:
+                # TODO resolve relative paths (relative to config file)
+                stream = open(self.filename)
+                return drivers.JSONDriver(extract_aps(aps, self.aps), stream)
+
+        class SimpleTxtDriver(Struct):
+            aps: set[str | int]
+            filename: str
+
+            def get_driver(self, aps) -> drivers.SimpleTxtDriver:
+                # TODO resolve relative paths (relative to config file)
+                stream = open(self.filename)
+                return drivers.SimpleTxtDriver(extract_aps(aps, self.aps), stream)  # noqa: E501
+
         flip: list[RandomDriver] = field(default_factory=list)
         user: list[UserDriver] = field(default_factory=list)
+        json: list[JSONDriver] = field(default_factory=list)
+        txt: list[SimpleTxtDriver] = field(default_factory=list)
 
     class RunnerSection(Struct):
         NONDET_VALUES = {
@@ -106,4 +130,4 @@ class TomlV1(Struct):
             raise ValueError(f"APs have multiple drivers: {dups}")
 
     def drivers(self):
-        yield from chain(self.driver.flip, self.driver.user)
+        yield from chain(self.driver.flip, self.driver.user, self.driver.json, self.driver.txt)  # noqa: E501

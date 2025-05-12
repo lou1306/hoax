@@ -8,6 +8,10 @@ from typing import Iterable
 log = logging.getLogger(__name__)
 
 
+class EndOfFiniteTrace(Exception):
+    pass
+
+
 class Driver(ABC):
     def __init__(self, aps: Iterable[str]) -> None:
         log.debug(f"Instantiating {type(self).__name__} for {aps=}")
@@ -79,11 +83,7 @@ class StreamDriver(Driver):
         self.prev = {}
 
     def get(self) -> dict:
-        line = self.read_next()
-        result = ({**self.prev} if self.diff else {}) | self.to_dict(line)
-        if self.diff:
-            self.prev = result
-        return result
+        return self.read_next()
 
     def read_next(self) -> dict:
         raise NotImplementedError
@@ -93,6 +93,23 @@ class JSONDriver(StreamDriver):
     def read_next(self) -> dict:
         line = self.stream.readline()
         return loads(line)
+
+
+class SimpleTxtDriver(StreamDriver):
+    def read_next(self):
+        line = self.stream.readline()
+        if not line:
+            self.stream.close()
+            raise EndOfFiniteTrace(self.stream.name)
+        data = {ap: False for ap in self.aps}
+        while line:
+            if line == "\n":
+                return data
+            ap = line[:-1]
+            if ap in self.aps:
+                data[ap] = True
+            line = self.stream.readline()
+        return data
 
 
 def handle(in_str: str) -> bool:
