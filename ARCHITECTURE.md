@@ -1,7 +1,7 @@
 The general idea is to separate logic into three class families:
 
 * Drivers: provide valuations for the automaton's atomic propositions (AP)
-* Runners: take values from drivers and evolve the automaton accordingly
+* Runners: take values from drivers and evolve the automata accordingly
 * Hooks: perform additional actions when triggered
 
 # Drivers
@@ -32,41 +32,49 @@ partial updates and all other APs are assumed to stay unchanged. (WIP)
 
 By default, if no transition is available, the automaton will remain in its current state (stutter). 
 
+
+We also support running multiple automata at the same time. At the moment
+these all receive the same inputs.
+
+# Actions
+
+Actions allow to configure a runner's behaviour when specific situations arise.
+At the moment we implement two extension points:
+
+* When no successor to the current state is available to the given input (deadlock);
+* When multiple transitions are available from the current state under the given
+  input (nondeterminism).
+
+Actions include:
+
+* `Log`: write down information to a log file, or to stdout
+* `Reset`: resets the automaton to its initial state
+* `Quit`: quit `hoa-exec`
+* `Composite`: a composition of two or more of the above.
+
+For instance, the user may want to log a message and reset the automaton on deadlock.
+This can be achieved by adding a `Log()` and a `Reset()` actions to the runner's
+deadlock actions. (Only via API currently; scripting support is planned)
+
 # Hooks
 
-Hooks allow to customize the behaviour of `hoa-exec` by firing a *reaction* when
-some specific *condition* is met. These are still far from being laid out in
-detail nor implemented.
+Hooks allow to further customize the behaviour of `hoa-exec` by firing an
+action when some specific *condition* is met. These are still far from being
+laid out in detail nor implemented.
 
-The idea for now is to provide two extension point at every iteration of the
-runner: *before transition* (but after available transitions are computed), and
-*after transition*, i.e., when the automaton moves to the successor state.
+At the moment, hooks are tested and fired *after* a transition has taken place.
 
 Before-transition conditions might include
 
-* Deadlock: no feasible successor state is found
-* Nondeterminism: multiple successor states are available
-
-* Stutter: the automaton takes a self-transition (from current state unto
-  itself)
-* State change: the automaton moves from the current state to another one
-* Transition: either state change or stutter
+* Always: fires after every transition
+* Bound: a certain number of step has been performed
+* Reach: a specific state has been reached
 * Acceptance: an acceptance condition is met
-
-And reactions might include:
-
-* Log: write down information to a log file, or to stdout
-* Reset: resets the automaton to its initial state
-* Goto: set the automaton's current state (this may be a family of reactions 
-  with different policies for choosing the state)
-* Exit: quit `hoa-exec`
-* Composite: a composition of two or more of the above.
 
 Some examples why hooks are useful:
 
+* We might want print a message when specific states have been reached
+
 * Setting up `hoa-exec` for runtime verification (RV) would entail
   adding a hook whereby meeting the acceptance condition (i.e., detecting a
-  violation) should trigger a Log action and possibly a Reset/Goto.
-
-* By using a Nondeterminism + Goto hook the user may customize how the
-  automaton will resolve nondeterminism.
+  violation or deadlock) should trigger a Log action and possibly a Reset.
