@@ -24,7 +24,7 @@ class Configuration(ABC):
         return self.runner
 
     @staticmethod
-    def factory(fname: Path, a: list[Automaton]):
+    def factory(fname: Path, a: list[Automaton], monitor: bool = False):
         if fname.suffix != ".toml":
             raise ConfigurationError(f"Unsupported config format {fname.suffix}")  # noqa: E501
         with open(fname, "rb") as conf_file:
@@ -35,7 +35,7 @@ class Configuration(ABC):
                 conf_version = toml["hoa-exec"]["version"]
                 if conf_version == 1:
                     conf = msgspec.convert(toml, type=TomlV1)
-                    return TomlConfigV1(fname, conf, a)
+                    return TomlConfigV1(fname, conf, a, monitor)
                 else:
                     raise ConfigurationError(f"Unsupported version {conf_version}")  # noqa: E501
             except (AssertionError, tomli.TOMLDecodeError, msgspec.ValidationError) as err:  # noqa: E501
@@ -43,18 +43,18 @@ class Configuration(ABC):
 
 
 class DefaultConfig(Configuration):
-    def __init__(self, a: list[Automaton]) -> None:
+    def __init__(self, a: list[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
         runner, aut = (
             (SingleRunner, a[0]) if len(a) == 1 else (CompositeRunner, a))
         self.driver = UserDriver(list(aps))
-        self.runner = runner(aut=aut, drv=self.driver)
+        self.runner = runner(aut=aut, drv=self.driver, mon=mon)
         self.runner.nondet_actions.append(UserChoice())
 
 
 class TomlConfigV1(Configuration):
-
-    def __init__(self, fname: Path, conf: TomlV1, a: list[Automaton]) -> None:
+    def __init__(self, fname: Path, conf: TomlV1, a: list[Automaton],
+                 monitor: bool = False) -> None:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.getLogger().handlers.clear()
         for log_conf in conf.log:
@@ -72,9 +72,9 @@ class TomlConfigV1(Configuration):
             d.append(default_driver(aps_left))
         self.driver = d if len(d.drivers) > 1 else d.drivers[0]
         self.runner = (
-            CompositeRunner(a, d)
+            CompositeRunner(a, d, monitor)
             if len(a) > 1
-            else SingleRunner(a[0], d))
+            else SingleRunner(a[0], d, monitor))
 
         nondet_action = conf.runner.get_nondet()
         if nondet_action is not None:

@@ -1,4 +1,5 @@
 from abc import ABC
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -6,6 +7,8 @@ from typing import Collection, Iterable
 
 import hoa.ast.boolean_expression as ast
 import hoa.ast.label as ast_label
+import networkit as nk
+from networkit import Graph
 from hoa.core import HOA, Edge, State
 from hoa.parsers import HOAParser
 
@@ -75,6 +78,12 @@ class Automaton:
         self.cache = {}
         self.filename = filename
         self.int2states = {x.index: x for x in aut.body.state2edges}
+        self.graph, self.traps = self.graph_and_traps()
+        # Compute accepting sets
+        self.acc_sets = defaultdict(set)
+        for x in self.aut.body.state2edges:
+            for s in (x.acc_sig or tuple()):
+                self.acc_sets[s].add(x.index)
 
     def get_aps(self):
         yield from self.aut.header.propositions
@@ -120,6 +129,43 @@ class Automaton:
                 val = None
             self.cache[key] = val
         return self.cache[key]
+
+    def graph_and_traps(self) -> tuple[Graph, frozenset[frozenset[int]]]:
+        # Build digraph of automaton
+        states = len(self.int2states)
+        g = nk.Graph(states, directed=True)
+        for s, edges in self.aut.body.state2edges.items():
+            for e in edges:
+                g.addEdge(s.index, e.state_conj[0])
+        # Compute SCCs
+        sccs = nk.components.StronglyConnectedComponents(g)
+        sccs.run()
+        traps = []
+        trap_map = {}
+        for k in sccs.getComponents():
+            if all(n in k for q in k for n in g.iterNeighbors(q)):
+                # k is a BSCC => k is a minimal trap set
+                bscc = set(k)
+                traps.append(bscc)
+                trap_map |= {q: bscc for q in bscc}
+                continue
+            # Determine if k is part of a non-minimal trap set
+            is_trap = True
+            neighbor_traps = set()
+            for n in (n for q in k for n in g.iterNeighbors(q) if n not in k):
+                try:
+                    lookup = trap_map.get(n, next(t for t in traps if n in t))
+                    neighbor_traps.add(frozenset(lookup))
+                except StopIteration:
+                    is_trap = False
+                    break
+            if is_trap:
+                new_trap = set(k).union(q for t in neighbor_traps for q in t)
+                traps.append(new_trap)
+                trap_map |= {q: new_trap for q in k}
+        return g, frozenset(frozenset(x) for x in traps if len(x) < states)
+
+
 def parse(file: str) -> Automaton:
     __parser = HOAParser()
     input_string = Path(file).read_text()

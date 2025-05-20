@@ -30,6 +30,14 @@ def main(
         config: Annotated[
             Optional[Path],
             typer.Option(help="Path to a TOML config file.")] = None,
+        monitor: Annotated[
+            bool,
+            typer.Option(help="Monitor the automaton's acceptance condition.")
+        ] = False,
+        quiet: Annotated[
+            bool,
+            typer.Option(help="Suppress output of individual transitions.")
+        ] = False,
         version: Annotated[
             Optional[bool],
             typer.Option(
@@ -43,18 +51,23 @@ def main(
         automata = list(exc.map(parse, files))
 
     conf = (
-        Configuration.factory(config, automata)
+        Configuration.factory(config, automata, monitor)
         if config is not None
-        else DefaultConfig(automata))
+        else DefaultConfig(automata, monitor))
 
     run = conf.get_runner()
 
     t = datetime.now()
     run.init()
     try:
-        while True:
-            run.step()
+        if quiet:
+            while True:
+                run.step()
+        else:
+            while True:
+                tr = run.step()
+                if tr:
+                    print(*(f"{i}: {t}" for i, t in enumerate(tr)), sep="\n")
     except (StopRunner, KeyboardInterrupt, EndOfFiniteTrace) as e:
-        # log.debug(f"Stopping due to {e}")
         print(f"Stopping due to {repr(e)}", file=sys.stderr)
     print(run.count, "steps,", datetime.now() - t, "seconds", file=sys.stderr)

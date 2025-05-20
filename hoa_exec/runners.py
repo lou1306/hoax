@@ -1,8 +1,13 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 from random import choice
 from typing import Optional, Sequence
 
+import networkit as nk
+from hoa.ast.acceptance import AcceptanceAtom, AtomType
+from hoa.ast.boolean_expression import PositiveAnd, PositiveOr
 from hoa.core import Edge, State
+from networkit.graph import Graph
 
 from .drivers import Driver
 from .hoa import Automaton, Transition, fmt_edge, fmt_state
@@ -54,9 +59,10 @@ class Runner(ABC):
 
 
 class CompositeRunner(Runner):
-    def __init__(self, automata: Sequence[Automaton], drv: Driver) -> None:
+    def __init__(self, automata: Sequence[Automaton], drv: Driver,
+                 monitor: bool = False) -> None:
         self.driver = drv
-        self.runners = [SingleRunner(a, drv) for a in automata]
+        self.runners = [SingleRunner(a, drv, monitor) for a in automata]
         self.count = 0
 
     def init(self) -> None:
@@ -83,7 +89,7 @@ class CompositeRunner(Runner):
 
 
 class SingleRunner(Runner):
-    def __init__(self, aut: Automaton, drv: Driver) -> None:
+    def __init__(self, aut: Automaton, drv: Driver, mon: bool = False) -> None:
         self.aut = aut
         self.aps = list(aut.get_aps())
         self.driver = drv
@@ -96,6 +102,10 @@ class SingleRunner(Runner):
         self.candidates: list[Edge] = []
         prp = self.aut.aut.header.properties or []
         self.deterministic = "deterministic" in prp
+        # TODO make this configurable
+        if mon:
+            chk = AcceptanceChecker.make_checker(self.aut)
+            self.transition_hooks.append(Hook(chk, Reset()))
 
     def init(self) -> None:
         self.state = next(iter(self.aut.get_initial_states()))
@@ -227,3 +237,186 @@ class Quit(Action):
 
     def run(self, runner):
         raise StopRunner()
+
+
+class PrefixType(Enum):
+    GOOD = 1
+    BAD = 2
+    UGLY = 3
+
+    def invert(self) -> "PrefixType":
+        if self == PrefixType.GOOD:
+            return PrefixType.BAD
+        if self == PrefixType.BAD:
+            return PrefixType.GOOD
+        return self
+
+
+class AcceptanceChecker(Condition):
+    @abstractmethod
+    def check(self, state: int) -> PrefixType | None:
+        pass
+
+    @staticmethod
+    def make_checker(aut: Automaton):
+        acond = aut.aut.header.acceptance.condition
+        all_states = set(aut.int2states)
+
+        def get_uglies(accept: set[int]):
+            graph = Graph(directed=True)
+            for e in aut.graph.iterEdges():
+                graph.addEdge(*e, addMissing=True)
+            for x in accept:
+                graph.removeNode(x)
+            result = set()
+            for trap in aut.traps:
+                t = trap - accept
+                if t in result:
+                    continue
+                for node in t:
+                    dfs = []
+
+                    def callback(u):
+                        dfs.append(u)
+                        dfs.extend(graph.iterNeighbors(u))
+
+                    nk.graph.Traversal.DFSfrom(graph, node, callback)
+                    if len(dfs) != len(set(dfs)):
+                        result.add(t)
+            return frozenset(result)
+
+        def _mk(cond):
+            def get_acceptance_set(index: int):
+                accept = aut.acc_sets[index]
+                if cond.negated:
+                    accept = all_states - accept
+                return frozenset(accept)
+            match cond:
+                case AcceptanceAtom(atom_type=AtomType.INFINITE):
+                    accept = get_acceptance_set(cond.acceptance_set)
+                    return Inf(accept, aut.traps, get_uglies(accept))
+                case AcceptanceAtom(atom_type=AtomType.FINITE):
+                    accept = get_acceptance_set(cond.acceptance_set)
+                    return Fin(accept, aut.traps, get_uglies(accept))
+                case PositiveAnd():
+                    return And([_mk(c) for c in cond.operands])
+                case PositiveOr():
+                    return Or([_mk(c) for c in cond.operands])
+        chk = _mk(acond)
+        chk.set_filename(aut.filename)
+        return chk
+
+
+class BaseChecker(AcceptanceChecker):
+    def __init__(self, aset, traps, uglies):
+        self.aset = aset
+        self.traps = traps
+        self.uglies = uglies
+        self.name = None
+        self.cache = {}
+
+    def set_filename(self, name: str) -> None:
+        self.name = name
+
+    def check(self, runner: SingleRunner) -> PrefixType | None:
+        state = runner.state.index
+        if state not in self.cache:
+            self.cache[state] = self.check_state(runner.state.index)
+        return self.cache[state]
+
+    def check_state(state: int) -> PrefixType | None:
+        raise NotImplementedError
+
+
+class Inf(BaseChecker):
+    def __str__(self):
+        return f"Inf({{{self.aset}}}){'@' if self.name else ""}{self.name or ""}"  # noqa: E501
+
+    def check_state(self, state: int) -> PrefixType | None:
+        for t in self.traps:
+            if state in t:
+                if t <= self.aset:
+                    return PrefixType.GOOD
+                if not (t & self.aset):
+                    return PrefixType.BAD
+                if any(t & u for u in self.uglies):
+                    return PrefixType.UGLY
+        return None
+
+
+class Fin(BaseChecker):
+    def __str__(self):
+        return f"Fin({{{self.aset}}}){'@' if self.name else ""}{self.name or ""}"  # noqa: E501
+
+    def check_state(self, state: int) -> PrefixType | None:
+        for t in self.traps:
+            if state in t:
+                if t <= self.aset:
+                    return PrefixType.BAD
+                if not (t & self.aset):
+                    return PrefixType.GOOD
+                if any(t & u for u in self.uglies):
+                    return PrefixType.UGLY
+        return None
+
+
+class Neg(AcceptanceChecker):
+    def __init__(self, mon: AcceptanceChecker):
+        self.mon = mon
+
+    def __str__(self):
+        if isinstance(self.mon, Inf):
+            return f"Fin({{{self.mon.aset}}})"
+        return f"!({self.mon})"
+
+    def check(self, runner: SingleRunner):
+        p = self.mon.check(runner)
+        if p is not None:
+            return p.invert()
+        return None
+
+
+class And(AcceptanceChecker):
+    def __init__(self, monitors):
+        self.monitors = monitors
+
+    def __str__(self):
+        return " & ".join(f"({m})" for m in self.monitors)
+
+    def check(self, runner: SingleRunner):
+        checks = set()
+        for m in self.monitors:
+            check = m.check(runner)
+            if check == PrefixType.UGLY:
+                return PrefixType.UGLY
+            checks.add(check)
+        # If prefix is bad for at least one operand, it's bad
+        if PrefixType.BAD in checks:
+            return PrefixType.BAD
+        if PrefixType.GOOD in checks:
+            return PrefixType.GOOD
+        return None
+
+
+class Or(AcceptanceChecker):
+    def __init__(self, monitors):
+        self.monitors = monitors
+
+    def __str__(self):
+        return " | ".join(f"({m})" for m in self.monitors)
+
+    def check(self, runner: SingleRunner):
+        checks = set()
+        for m in self.monitors:
+            check = m.check(runner)
+            checks.add(check)
+        # If prefix is good for at least one operand, it's good
+        if PrefixType.GOOD in checks:
+            return PrefixType.GOOD
+        # Prefix is bad for all operands = it's bad
+        if PrefixType.BAD in checks and PrefixType.UGLY not in checks:
+            return PrefixType.BAD
+        # Prefix is bad for some operands and ugly for others = it's ugly
+        if PrefixType.UGLY not in checks:
+            return PrefixType.BAD
+        return None
