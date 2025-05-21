@@ -1,8 +1,10 @@
+import multiprocessing as mp
 from abc import ABC, abstractmethod
 from enum import Enum
 from random import choice
 from typing import Optional, Sequence
 
+import msgpack
 import networkit as nk
 from hoa.ast.acceptance import AcceptanceAtom, AtomType
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr
@@ -10,8 +12,7 @@ from hoa.core import Edge, State
 from networkit.graph import Graph
 
 from .drivers import Driver
-from .hoa import Automaton, Transition, fmt_edge, fmt_state
-
+from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse
 
 
 class Action(ABC):
@@ -56,6 +57,89 @@ class Runner(ABC):
     @abstractmethod
     def add_deadlock_action(self, action):
         raise NotImplementedError
+
+
+def spawn_runner(pipe: mp.Pipe):  # type: ignore
+    fname, monitor = pipe.recv(), pipe.recv()
+    aut = parse(fname)
+    runner = SingleRunner(aut, None, monitor)
+    while True:
+        data = pipe.recv_bytes()
+        msg = msgpack.loads(data)
+        match msg:
+            case "INIT":
+                runner.init()
+            case "QUIT":
+                break
+            case "GET_COUNT":
+                pipe.send(runner.count)
+            case dict(values):
+                x = runner.step(values)
+                pipe.send_bytes(msgpack.dumps(x))
+                # pipe.send(x)
+            case ("ADD_HOOK", hook):
+                runner.add_transition_hook(hook)
+            case ("ADD_NONDET", action):
+                x = runner.add_nondet_action(action)
+            case ("ADD_DEADLOCK", action):
+                x = runner.add_deadlock_action(action)
+
+
+class MPCompositeRunner(Runner):
+    INIT_MSG = msgpack.dumps("INIT")
+    QUIT_MSG = msgpack.dumps("QUIT")
+    GET_COUNT_MSG = msgpack.dumps("GET_COUNT")
+
+    def __init__(self, automata: Sequence[Automaton], drv: Driver,
+                 monitor: bool = False) -> None:
+        self.driver = drv
+        self.runners = []
+        self.procs = []
+        for a in automata:
+            parent_pipe, child_pipe = mp.Pipe()
+            proc = mp.Process(target=spawn_runner, args=(child_pipe,))
+            self.procs.append((proc, parent_pipe))
+            parent_pipe.send(a.filename)
+            parent_pipe.send(monitor)
+            proc.start()
+
+    def __del__(self):
+        for proc, pipe in self.procs:
+            pipe.close()
+            proc.kill()
+
+    @property
+    def count(self):
+        _, pipe = self.procs[0]
+        pipe.send_bytes(MPCompositeRunner.GET_COUNT_MSG)
+        return pipe.recv()
+
+    def init(self):
+        for _, pipe in self.procs:
+            pipe.send_bytes(MPCompositeRunner.INIT_MSG)
+
+    def step(self):
+        values = self.driver.get()
+        msg = msgpack.dumps(values)
+        for _, pipe in self.procs:
+            pipe.send_bytes(msg)
+        result = [tr for _, pipe in self.procs for tr in msgpack.loads(pipe.recv_bytes())]  # noqa: E501
+        return result
+
+    def add_transition_hook(self, hook):
+        msg = msgpack.dumps(("ADD_HOOK", hook))
+        for _, pipe in self.procs:
+            pipe.send_bytes(msg)
+
+    def add_nondet_action(self, action):
+        msg = msgpack.dumps(("ADD_NONDET", action))
+        for _, pipe in self.procs:
+            pipe.send_bytes(msg)
+
+    def add_deadlock_action(self, action):
+        msg = msgpack.dumps(("ADD_DEADLOCK", action))
+        for _, pipe in self.procs:
+            pipe.send_bytes(msg)
 
 
 class CompositeRunner(Runner):
