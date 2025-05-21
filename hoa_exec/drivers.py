@@ -35,7 +35,7 @@ class CompositeDriver(Driver):
         self.aps.extend(driver.aps)
 
     def get(self) -> dict:
-        result = {}
+        result = set()
         for d in self.drivers:
             result |= d.get()
         return result
@@ -55,10 +55,11 @@ class UserDriver(Driver):
         return False if in_str in ('false', 'null', '') else bool(in_str)
 
     def get(self):
-        result = {}
+        result = set()
         for ap in self.aps:
             value = handle(input(f"{ap}? "))
-            result[ap] = value
+            if value:
+                result.add(ap)
         return result
 
 
@@ -101,13 +102,13 @@ class SimpleTxtDriver(StreamDriver):
         if not line:
             self.stream.close()
             raise EndOfFiniteTrace(self.stream.name)
-        data = {ap: False for ap in self.aps}
+        data = set()
         while line:
             if line == "\n":
                 return data
             ap = line[:-1]
             if ap in self.aps:
-                data[ap] = True
+                data.add(ap)
             line = self.stream.readline()
         return data
 

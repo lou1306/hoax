@@ -219,7 +219,8 @@ class SingleRunner(Runner):
 
     def step(self, inputs: Optional[dict] = None) -> list[Transition]:
         """return False iff automaton stuttered"""
-        inputs = inputs or self.driver.get()
+        if inputs is None:
+            inputs = self.driver.get()
         if self.deterministic:
             candidate = self.aut.get_first_candidate(self.state, inputs)
             self.candidates = [candidate] if candidate is not None else []
@@ -247,7 +248,8 @@ class SingleRunner(Runner):
 class DetCompleteSingleRunner(SingleRunner):
     def step(self, inputs: Optional[dict] = None) -> list[Transition]:
         """return False iff automaton stuttered"""
-        inputs = inputs or self.driver.get()
+        if inputs is None:
+            inputs = self.driver.get()
         # values = tuple(inputs[x] for x in self.aut.hoa.header.propositions)
         edge = self.aut.get_first_candidate(self.state, inputs)
         next_state = edge.state_conj[0]
@@ -440,10 +442,12 @@ class BaseChecker(AcceptanceChecker):
         self.name = name
 
     def check(self, runner: SingleRunner) -> PrefixType | None:
-        state = runner.state
-        if state not in self.cache:
-            self.cache[state] = self.check_state(runner.state)
-        return self.cache[state]
+        try:
+            return self.cache[runner.state]
+        except KeyError:
+            value = self.check_state(runner.state)
+            self.cache[runner.state] = value
+            return value
 
     def check_state(state: int) -> PrefixType | None:
         raise NotImplementedError

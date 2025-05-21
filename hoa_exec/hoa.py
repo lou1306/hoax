@@ -96,19 +96,19 @@ class Automaton:
 
     def get_trap_set_of(self, index: int) -> tuple[set, bool]:
         key = (get_trap_set_of, index)
-        if key in self.cache:
+        try:
             return self.cache[key]
+        except KeyError:
+            k_id, k_nodes = self.graph_node2scc[index]
+            is_minimal = self.cond.degree(k_id) == 0
+            result = set(k_nodes)
 
-        k_id, k_nodes = self.graph_node2scc[index]
-        is_minimal = self.cond.degree(k_id) == 0
-        result = set(k_nodes)
+            def callback(u):
+                result.update(self.cond_node2scc[u])
 
-        def callback(u):
-            result.update(self.cond_node2scc[u])
-
-        nk.graph.Traversal.DFSfrom(self.cond, k_id, callback)
-        self.cache[key] = result, is_minimal
-        return result, is_minimal
+            nk.graph.Traversal.DFSfrom(self.cond, k_id, callback)
+            self.cache[key] = result, is_minimal
+            return result, is_minimal
 
     def get_aps(self):
         yield from self.hoa.header.propositions
@@ -125,7 +125,7 @@ class Automaton:
     def evaluate(self, node, valuation):
         match node:
             case ast_label.LabelAtom():
-                return valuation[self.hoa.header.propositions[node.proposition]]  # noqa: E501
+                return self.hoa.header.propositions[node.proposition] in valuation  # noqa: E501
             case ast.FalseFormula():
                 return False
             case ast.TrueFormula():
@@ -144,14 +144,16 @@ class Automaton:
                 yield edge
 
     def get_first_candidate(self, index: int, values: dict):
-        key = (get_first_candidate, index, *values.items())
-        if key not in self.cache:
+        key = (get_first_candidate, index, *sorted(values))
+        try:
+            return self.cache[key]
+        except KeyError:
             for edge in self.get_edges(index):
                 if self.evaluate(edge.label, values):
                     self.cache[key] = edge
                     return edge
             self.cache[key] = None
-        return self.cache[key]
+            return self.cache[key]
 
     def graph_and_cond(self) -> tuple[Graph, Graph, dict, dict]:
         # Build digraph of automaton
