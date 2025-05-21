@@ -78,12 +78,23 @@ class Automaton:
         self.cache = {}
         self.filename = filename
         self.int2states = {x.index: x for x in aut.body.state2edges}
-        self.graph, self.traps = self.graph_and_traps()
+        self.graph, self.cond, self.graph_node2scc, self.cond_node2scc = self.graph_and_cond()  # noqa: E501
         # Compute accepting sets
         self.acc_sets = defaultdict(set)
         for x in self.aut.body.state2edges:
             for s in (x.acc_sig or tuple()):
                 self.acc_sets[s].add(x.index)
+
+    def get_trap_set_of(self, index: int) -> tuple[set, bool]:
+        k_id, k_nodes = self.graph_node2scc[index]
+        is_minimal = self.cond.degree(k_id) == 0
+        result = set(k_nodes)
+
+        def callback(u):
+            result.update(self.cond_node2scc[u])
+
+        nk.graph.Traversal.DFSfrom(self.cond, k_id, callback)
+        return result, is_minimal
 
     def get_aps(self):
         yield from self.aut.header.propositions
@@ -130,40 +141,33 @@ class Automaton:
             self.cache[key] = val
         return self.cache[key]
 
-    def graph_and_traps(self) -> tuple[Graph, frozenset[frozenset[int]]]:
+    def graph_and_cond(self) -> tuple[Graph, Graph, dict, dict]:
         # Build digraph of automaton
         states = len(self.int2states)
         g = nk.Graph(states, directed=True)
+        
         for s, edges in self.aut.body.state2edges.items():
             for e in edges:
                 g.addEdge(s.index, e.state_conj[0])
         # Compute SCCs
+
         sccs = nk.components.StronglyConnectedComponents(g)
         sccs.run()
-        traps = []
-        trap_map = {}
+        # Compute condensation of g
+        cond = nk.Graph(directed=True)
+        g_node2scc = {}
+        cond_node2scc = {}
         for k in sccs.getComponents():
-            if all(n in k for q in k for n in g.iterNeighbors(q)):
-                # k is a BSCC => k is a minimal trap set
-                bscc = set(k)
-                traps.append(bscc)
-                trap_map |= {q: bscc for q in bscc}
-                continue
-            # Determine if k is part of a non-minimal trap set
-            is_trap = True
-            neighbor_traps = set()
-            for n in (n for q in k for n in g.iterNeighbors(q) if n not in k):
-                try:
-                    lookup = trap_map.get(n, next(t for t in traps if n in t))
-                    neighbor_traps.add(frozenset(lookup))
-                except StopIteration:
-                    is_trap = False
-                    break
-            if is_trap:
-                new_trap = set(k).union(q for t in neighbor_traps for q in t)
-                traps.append(new_trap)
-                trap_map |= {q: new_trap for q in k}
-        return g, frozenset(frozenset(x) for x in traps if len(x) < states)
+            s = cond.addNode()
+            for node in k:
+                g_node2scc[node] = s, k
+                cond_node2scc[s] = k
+
+        for (src, tgt) in g.iterEdges():
+            src_k, tgt_k =  g_node2scc[src][0], g_node2scc[tgt][0]
+            if src_k != tgt_k:
+                cond.addEdge(src_k, tgt_k, checkMultiEdge=True)
+        return g, cond, g_node2scc, cond_node2scc
 
 
 def parse(file: str) -> Automaton:

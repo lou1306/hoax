@@ -63,7 +63,10 @@ class CompositeRunner(Runner):
                  monitor: bool = False) -> None:
         self.driver = drv
         self.runners = [SingleRunner(a, drv, monitor) for a in automata]
-        self.count = 0
+
+    @property
+    def count(self):
+        return self.runners[0].count
 
     def init(self) -> None:
         for runner in self.runners:
@@ -72,7 +75,6 @@ class CompositeRunner(Runner):
     def step(self) -> list[Transition]:
         values = self.driver.get()
         result = [tr for r in self.runners for tr in r.step(values)]
-        self.count += 1
         return result
 
     def add_transition_hook(self, hook):
@@ -263,27 +265,42 @@ class AcceptanceChecker(Condition):
         all_states = set(aut.int2states)
 
         def get_uglies(accept: set[int]):
-            graph = Graph(directed=True)
-            for e in aut.graph.iterEdges():
-                graph.addEdge(*e, addMissing=True)
-            for x in accept:
-                graph.removeNode(x)
             result = set()
-            for trap in aut.traps:
-                t = trap - accept
-                if t in result:
+            for k_id in aut.cond.iterNodes():
+                if aut.cond.degree(k_id) > 0:
                     continue
-                for node in t:
+                k = set(aut.graph_node2scc[k_id][1])
+                k_minus_accept = k - accept
+                if not k_minus_accept:
+                    continue
+                # Build graph for k_minus_accept
+                graph = Graph(directed=True)
+
+                for e in aut.graph.iterEdges():
+                    if e[0] in k_minus_accept and e[1] in k_minus_accept:
+                        graph.addEdge(*e, addMissing=True)
+                for x in accept:
+                    graph.removeNode(x)
+
+                # Check whether k_minus_accept is acyclic
+                seen = set()
+                for node in k_minus_accept:
+                    # Skip nodes visited in a previous DFS
+                    if node in seen:
+                        continue
                     dfs = []
 
                     def callback(u):
                         dfs.append(u)
-                        dfs.extend(graph.iterNeighbors(u))
+                        for v in graph.iterNeighbors(u):
+                            dfs.extend(v)
+                            seen.add(v)
 
                     nk.graph.Traversal.DFSfrom(graph, node, callback)
                     if len(dfs) != len(set(dfs)):
-                        result.add(t)
-            return frozenset(result)
+                        result.add(k_minus_accept)
+                        break
+            return result
 
         def _mk(cond):
             def get_acceptance_set(index: int):
@@ -294,10 +311,10 @@ class AcceptanceChecker(Condition):
             match cond:
                 case AcceptanceAtom(atom_type=AtomType.INFINITE):
                     accept = get_acceptance_set(cond.acceptance_set)
-                    return Inf(accept, aut.traps, get_uglies(accept))
+                    return Inf(accept, aut, get_uglies(accept))
                 case AcceptanceAtom(atom_type=AtomType.FINITE):
                     accept = get_acceptance_set(cond.acceptance_set)
-                    return Fin(accept, aut.traps, get_uglies(accept))
+                    return Fin(accept, aut, get_uglies(accept))
                 case PositiveAnd():
                     return And([_mk(c) for c in cond.operands])
                 case PositiveOr():
@@ -308,9 +325,9 @@ class AcceptanceChecker(Condition):
 
 
 class BaseChecker(AcceptanceChecker):
-    def __init__(self, aset, traps, uglies):
+    def __init__(self, aset: set[int], aut: Automaton, uglies):
         self.aset = aset
-        self.traps = traps
+        self.aut = aut
         self.uglies = uglies
         self.name = None
         self.cache = {}
@@ -333,14 +350,16 @@ class Inf(BaseChecker):
         return f"Inf({{{self.aset}}}){'@' if self.name else ""}{self.name or ""}"  # noqa: E501
 
     def check_state(self, state: int) -> PrefixType | None:
-        for t in self.traps:
-            if state in t:
-                if t <= self.aset:
-                    return PrefixType.GOOD
-                if not (t & self.aset):
-                    return PrefixType.BAD
-                if any(t & u for u in self.uglies):
-                    return PrefixType.UGLY
+        t, t_minimal = self.aut.get_trap_set_of(state)
+        if t <= self.aset:
+            return PrefixType.GOOD
+        if not (t & self.aset):
+            return PrefixType.BAD
+        if t_minimal:
+            return (
+                PrefixType.UGLY
+                if any(t & u for u in self.uglies)
+                else PrefixType.GOOD)
         return None
 
 
@@ -349,14 +368,16 @@ class Fin(BaseChecker):
         return f"Fin({{{self.aset}}}){'@' if self.name else ""}{self.name or ""}"  # noqa: E501
 
     def check_state(self, state: int) -> PrefixType | None:
-        for t in self.traps:
-            if state in t:
-                if t <= self.aset:
-                    return PrefixType.BAD
-                if not (t & self.aset):
-                    return PrefixType.GOOD
-                if any(t & u for u in self.uglies):
-                    return PrefixType.UGLY
+        t, t_minimal = self.aut.get_trap_set_of(state)
+        if t <= self.aset:
+            return PrefixType.BAD
+        if not (t & self.aset):
+            return PrefixType.GOOD
+        if t_minimal:
+            return (
+                PrefixType.UGLY
+                if any(t & u for u in self.uglies)
+                else PrefixType.BAD)
         return None
 
 
