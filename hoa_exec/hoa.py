@@ -3,6 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from sys import intern
 from typing import Collection, Iterable
 
 import hoa.ast.boolean_expression as ast
@@ -11,6 +12,10 @@ import networkit as nk
 from networkit import Graph
 from hoa.core import HOA, Edge, State
 from hoa.parsers import HOAParser
+
+
+get_first_candidate = intern("get_first_candidate")
+get_trap_set_of = intern("get_trap_set_of")
 
 
 def fmt_state(s: State) -> str:
@@ -77,8 +82,15 @@ class Automaton:
         self.ctrl = ctrl
         self.cache = {}
         self.filename = filename
-        self.int2states = {x.index: x for x in aut.body.state2edges}
+        maxstate = max(x.index for x in aut.body.state2edges)
+        self.int2states = [None]*(maxstate+1)
+        self.int2edges = [None]*(maxstate+1)
+        for x, edges in aut.body.state2edges.items():
+            self.int2states[x.index] = x
+            self.int2edges[x.index] = edges
+
         self.graph, self.cond, self.graph_node2scc, self.cond_node2scc = self.graph_and_cond()  # noqa: E501
+
         # Compute accepting sets
         self.acc_sets = defaultdict(set)
         for x in self.aut.body.state2edges:
@@ -86,6 +98,10 @@ class Automaton:
                 self.acc_sets[s].add(x.index)
 
     def get_trap_set_of(self, index: int) -> tuple[set, bool]:
+        key = (get_trap_set_of, index)
+        if key in self.cache:
+            return self.cache[key]
+
         k_id, k_nodes = self.graph_node2scc[index]
         is_minimal = self.cond.degree(k_id) == 0
         result = set(k_nodes)
@@ -94,6 +110,7 @@ class Automaton:
             result.update(self.cond_node2scc[u])
 
         nk.graph.Traversal.DFSfrom(self.cond, k_id, callback)
+        self.cache[key] = result, is_minimal
         return result, is_minimal
 
     def get_aps(self):
@@ -105,8 +122,8 @@ class Automaton:
     def get_initial_states(self):
         yield from self.aut.header.start_states
 
-    def get_edges(self, state: State):
-        yield from self.aut.body.state2edges[state]
+    def get_edges(self, index: int):
+        return self.int2edges[index]
 
     @staticmethod
     @lru_cache(maxsize=2048)
@@ -126,31 +143,30 @@ class Automaton:
                 return not Automaton.evaluate(arg, valuation)
         raise Exception(f"Unexpected node {node}")
 
-    def get_candidates(self, state: State, values: tuple):
-        for edge in self.get_edges(state):
+    def get_candidates(self, index: int, values: tuple):
+        for edge in self.get_edges(index):
             if self.evaluate(edge.label, values):
                 yield edge
 
-    def get_first_candidate(self, state: State, values: tuple):
-        key = ("get_first_candidate", state.index, values)
+    def get_first_candidate(self, index: int, values: tuple):
+        key = (get_first_candidate, index, values)
         if key not in self.cache:
-            try:
-                val = next(self.get_candidates(state, values))
-            except StopIteration:
-                val = None
-            self.cache[key] = val
+            for edge in self.get_edges(index):
+                if self.evaluate(edge.label, values):
+                    self.cache[key] = edge
+                    return edge
+            self.cache[key] = None
         return self.cache[key]
 
     def graph_and_cond(self) -> tuple[Graph, Graph, dict, dict]:
         # Build digraph of automaton
-        states = len(self.int2states)
-        g = nk.Graph(states, directed=True)
-        
-        for s, edges in self.aut.body.state2edges.items():
+        g = nk.Graph(directed=True)
+        for i, edges in enumerate(self.int2edges):
+            if edges is None:
+                continue
             for e in edges:
-                g.addEdge(s.index, e.state_conj[0])
+                g.addEdge(i, e.state_conj[0], addMissing=True)
         # Compute SCCs
-
         sccs = nk.components.StronglyConnectedComponents(g)
         sccs.run()
         # Compute condensation of g
