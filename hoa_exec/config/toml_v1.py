@@ -1,5 +1,6 @@
 from itertools import chain, combinations
 import logging
+from pathlib import Path
 import sys
 from typing import Annotated, Collection, Optional
 
@@ -12,6 +13,13 @@ from .. import drivers, runners
 def invalid(field: str, valid: Collection[str]):
     valid = ', '.join(valid)
     raise ValueError(f"{field} must be one of {valid}") from None
+
+
+def resolve(path: str, base_path: Path) -> Path:
+    resolved = Path(path)
+    if not resolved.is_absolute():
+        resolved = (base_path / resolved).resolve()
+    return resolved
 
 
 class TomlV1(Struct):
@@ -66,7 +74,7 @@ class TomlV1(Struct):
             aps: set[str | int]
             bias: Annotated[float, Meta(ge=0, le=1)] = None
 
-            def get_driver(self, aps) -> drivers.RandomDriver:
+            def get_driver(self, aps, _) -> drivers.RandomDriver:
                 result = drivers.RandomDriver(extract_aps(aps, self.aps))
                 if self.bias is not None:
                     result.cum_weights = (self.bias, 1)
@@ -75,25 +83,23 @@ class TomlV1(Struct):
         class UserDriver(Struct):
             aps: set[str | int]
 
-            def get_driver(self, aps) -> drivers.UserDriver:
+            def get_driver(self, aps, _) -> drivers.UserDriver:
                 return drivers.UserDriver(extract_aps(aps, self.aps))
 
         class JSONDriver(Struct):
             aps: set[str | int]
             filename: str
 
-            def get_driver(self, aps) -> drivers.JSONDriver:
-                # TODO resolve relative paths (relative to config file)
-                stream = open(self.filename)
+            def get_driver(self, aps, base_path: Path) -> drivers.JSONDriver:
+                stream = open(resolve(self.filename, base_path))
                 return drivers.JSONDriver(extract_aps(aps, self.aps), stream)
 
         class SimpleTxtDriver(Struct):
             aps: set[str | int]
             filename: str
 
-            def get_driver(self, aps) -> drivers.SimpleTxtDriver:
-                # TODO resolve relative paths (relative to config file)
-                stream = open(self.filename)
+            def get_driver(self, aps, base_path: Path) -> drivers.SimpleTxtDriver:    # noqa: E501
+                stream = open(resolve(self.filename, base_path))
                 return drivers.SimpleTxtDriver(extract_aps(aps, self.aps), stream)  # noqa: E501
 
         flip: list[RandomDriver] = field(default_factory=list)

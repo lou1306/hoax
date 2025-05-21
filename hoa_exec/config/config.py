@@ -63,7 +63,8 @@ class TomlConfigV1(Configuration):
         aps = list(ap for aut in a for ap in aut.get_aps())
         d = CompositeDriver()
         for drv_conf in conf.drivers():
-            drv = drv_conf.get_driver(aps)
+            base_dir = Path(self.fname).parent
+            drv = drv_conf.get_driver(aps, base_dir)
             d.append(drv)
 
         aps_left = [ap for ap in aps if ap not in set(d.aps)]
