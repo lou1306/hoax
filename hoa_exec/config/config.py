@@ -7,8 +7,8 @@ import tomli
 
 from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
-from ..runners import (Bound, CompositeRunner, Hook, Quit, SingleRunner,
-                       UserChoice)
+from ..runners import (Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
+                       Quit, SingleRunner, UserChoice)
 from .toml_v1 import TomlV1
 
 
@@ -72,10 +72,15 @@ class TomlConfigV1(Configuration):
             default_driver = conf.hoa_exec.get_default_driver()
             d.append(default_driver(aps_left))
         self.driver = d if len(d.drivers) > 1 else d.drivers[0]
-        self.runner = (
-            CompositeRunner(a, d, monitor)
-            if len(a) > 1
-            else SingleRunner(a[0], d, monitor))
+        if len(a) > 1:
+            self.runner = CompositeRunner(a, d, monitor)
+        elif all(
+            x in a[0].hoa.header.properties
+            for x in ("complete", "deterministic")
+        ):
+            self.runner = DetCompleteSingleRunner(a[0], d, monitor)
+        else:
+            self.runner = SingleRunner(a[0], d, monitor)
 
         nondet_action = conf.runner.get_nondet()
         if nondet_action is not None:

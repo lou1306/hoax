@@ -62,7 +62,15 @@ class CompositeRunner(Runner):
     def __init__(self, automata: Sequence[Automaton], drv: Driver,
                  monitor: bool = False) -> None:
         self.driver = drv
-        self.runners = [SingleRunner(a, drv, monitor) for a in automata]
+        self.runners = []
+        for a in automata:
+            if all(
+                x in a.hoa.header.properties
+                for x in ("complete", "deterministic")
+            ):
+                self.runners.append(DetCompleteSingleRunner(a, drv, monitor))
+            else:
+                self.runners.append(SingleRunner(a, drv, monitor))
 
     @property
     def count(self):
@@ -95,14 +103,14 @@ class SingleRunner(Runner):
         self.aut = aut
         self.aps = list(aut.get_aps())
         self.driver = drv
-        self.state: State = None
+        self.state: int | None = None
         self.count = 0
         # self.trace = []
         self.deadlock_actions: list[Action] = []
         self.nondet_actions: list[Action] = []
         self.transition_hooks: list[Hook] = []
         self.candidates: list[Edge] = []
-        prp = self.aut.aut.header.properties or []
+        prp = self.aut.hoa.header.properties or []
         self.deterministic = "deterministic" in prp
         # TODO make this configurable
         if mon:
@@ -110,10 +118,11 @@ class SingleRunner(Runner):
             self.transition_hooks.append(Hook(chk, Reset()))
 
     def init(self) -> None:
-        self.state = next(iter(self.aut.get_initial_states()))
         # TODO support initial state conjunction (alternating automata)
-        self.state = next(iter(self.state))
-        self.state = self.aut.int2states[self.state]
+        for x in self.aut.hoa.header.start_states:
+            for y in x:
+                self.state = y
+                return
 
     def add_transition_hook(self, hook):
         self.transition_hooks.append(hook)
@@ -127,12 +136,11 @@ class SingleRunner(Runner):
     def step(self, inputs: Optional[dict] = None) -> list[Transition]:
         """return False iff automaton stuttered"""
         inputs = inputs or self.driver.get()
-        values = tuple(inputs[x] for x in self.aut.aut.header.propositions)
         if self.deterministic:
-            candidate = self.aut.get_first_candidate(self.state, values)
+            candidate = self.aut.get_first_candidate(self.state, inputs)
             self.candidates = [candidate] if candidate is not None else []
         else:
-            self.candidates = list(self.aut.get_candidates(self.state, values))
+            self.candidates = list(self.aut.get_candidates(self.state, inputs))
         if not self.candidates:
             for action in self.deadlock_actions:
                 action.run(self)
@@ -143,15 +151,27 @@ class SingleRunner(Runner):
         if len(self.candidates) >= 1:
             edge = self.candidates[0]
             self.candidates = []
-            next_state_index = next(iter(edge.state_conj))
-            next_state = self.aut.int2states[next_state_index]
+            old_state, next_state = self.state, edge.state_conj[0]
 
-            tr = Transition(self.state, next_state, edge, self.aps)
             self.count += 1
             self.state = next_state
             for hook in self.transition_hooks:
                 hook.run(self)
-            return [tr]
+            return [(old_state, inputs, next_state)]
+
+
+class DetCompleteSingleRunner(SingleRunner):
+    def step(self, inputs: Optional[dict] = None) -> list[Transition]:
+        """return False iff automaton stuttered"""
+        inputs = inputs or self.driver.get()
+        # values = tuple(inputs[x] for x in self.aut.hoa.header.propositions)
+        edge = self.aut.get_first_candidate(self.state, inputs)
+        next_state = edge.state_conj[0]
+        self.count += 1
+        old_state, self.state = self.state, next_state
+        for hook in self.transition_hooks:
+            hook.run(self)
+        return [(old_state, inputs, next_state)]
 
 
 class Reach(Condition):
@@ -261,8 +281,8 @@ class AcceptanceChecker(Condition):
 
     @staticmethod
     def make_checker(aut: Automaton):
-        acond = aut.aut.header.acceptance.condition
-        all_states = set(aut.int2states)
+        acond = aut.hoa.header.acceptance.condition
+        all_states = aut.states
 
         def get_uglies(accept: set[int]):
             result = set()
@@ -336,9 +356,9 @@ class BaseChecker(AcceptanceChecker):
         self.name = name
 
     def check(self, runner: SingleRunner) -> PrefixType | None:
-        state = runner.state.index
+        state = runner.state
         if state not in self.cache:
-            self.cache[state] = self.check_state(runner.state.index)
+            self.cache[state] = self.check_state(runner.state)
         return self.cache[state]
 
     def check_state(state: int) -> PrefixType | None:

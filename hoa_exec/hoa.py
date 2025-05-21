@@ -1,7 +1,6 @@
 from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from sys import intern
 from typing import Collection, Iterable
@@ -78,22 +77,20 @@ class ForcedTransition(AbstractTransition):
 
 class Automaton:
     def __init__(self, aut: HOA, filename: str = None, ctrl: set = None):
-        self.aut = aut
+        self.hoa = aut
         self.ctrl = ctrl
         self.cache = {}
         self.filename = filename
-        maxstate = max(x.index for x in aut.body.state2edges)
-        self.int2states = [None]*(maxstate+1)
-        self.int2edges = [None]*(maxstate+1)
+        self.states = max(x.index for x in aut.body.state2edges)
+        self.int2edges = [None] * (self.states + 1)
         for x, edges in aut.body.state2edges.items():
-            self.int2states[x.index] = x
             self.int2edges[x.index] = edges
 
         self.graph, self.cond, self.graph_node2scc, self.cond_node2scc = self.graph_and_cond()  # noqa: E501
 
         # Compute accepting sets
         self.acc_sets = defaultdict(set)
-        for x in self.aut.body.state2edges:
+        for x in self.hoa.body.state2edges:
             for s in (x.acc_sig or tuple()):
                 self.acc_sets[s].add(x.index)
 
@@ -114,42 +111,40 @@ class Automaton:
         return result, is_minimal
 
     def get_aps(self):
-        yield from self.aut.header.propositions
+        yield from self.hoa.header.propositions
 
     def get_states(self):
         pass
 
     def get_initial_states(self):
-        yield from self.aut.header.start_states
+        yield from self.hoa.header.start_states
 
     def get_edges(self, index: int):
         return self.int2edges[index]
 
-    @staticmethod
-    @lru_cache(maxsize=2048)
-    def evaluate(node, valuation):
+    def evaluate(self, node, valuation):
         match node:
             case ast_label.LabelAtom():
-                return valuation[node.proposition]
+                return valuation[self.hoa.header.propositions[node.proposition]]  # noqa: E501
             case ast.FalseFormula():
                 return False
             case ast.TrueFormula():
                 return True
             case ast.And(operands=ops):
-                return all(Automaton.evaluate(x, valuation) for x in ops)
+                return all(self.evaluate(x, valuation) for x in ops)
             case ast.Or(operands=ops):
-                return any(Automaton.evaluate(x, valuation) for x in ops)
+                return any(self.evaluate(x, valuation) for x in ops)
             case ast.Not(argument=arg):
-                return not Automaton.evaluate(arg, valuation)
+                return not self.evaluate(arg, valuation)
         raise Exception(f"Unexpected node {node}")
 
-    def get_candidates(self, index: int, values: tuple):
+    def get_candidates(self, index: int, values: dict):
         for edge in self.get_edges(index):
             if self.evaluate(edge.label, values):
                 yield edge
 
-    def get_first_candidate(self, index: int, values: tuple):
-        key = (get_first_candidate, index, values)
+    def get_first_candidate(self, index: int, values: dict):
+        key = (get_first_candidate, index, *values.items())
         if key not in self.cache:
             for edge in self.get_edges(index):
                 if self.evaluate(edge.label, values):
@@ -180,7 +175,7 @@ class Automaton:
                 cond_node2scc[s] = k
 
         for (src, tgt) in g.iterEdges():
-            src_k, tgt_k =  g_node2scc[src][0], g_node2scc[tgt][0]
+            src_k, tgt_k = g_node2scc[src][0], g_node2scc[tgt][0]
             if src_k != tgt_k:
                 cond.addEdge(src_k, tgt_k, checkMultiEdge=True)
         return g, cond, g_node2scc, cond_node2scc
