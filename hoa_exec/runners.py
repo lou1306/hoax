@@ -547,5 +547,5 @@ class Or(AcceptanceChecker):
             return PrefixType.BAD
         # Prefix is bad for some operands and ugly for others = it's ugly
         if PrefixType.UGLY not in checks:
-            return PrefixType.BAD
+            return PrefixType.UGLY
         return None
