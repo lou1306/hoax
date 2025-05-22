@@ -1,5 +1,5 @@
 # Main section (mandatory)
-[hoa-exec]
+[hoax]
 # Name for the configuration
 name = "Flip"
 # Config file version (mandatory)

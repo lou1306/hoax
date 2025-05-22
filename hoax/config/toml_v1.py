@@ -24,7 +24,7 @@ def resolve(path: str, base_path: Path) -> Path:
 
 class TomlV1(Struct):
 
-    class HoaExecSection(Struct):
+    class HoaxSection(Struct):
         DRIVERS = {
             "flip": drivers.RandomDriver,
             "user": drivers.UserDriver,
@@ -123,7 +123,7 @@ class TomlV1(Struct):
             if self.nondet not in self.NONDET_VALUES:
                 invalid("nondet", self.NONDET_VALUES)
 
-    hoa_exec: HoaExecSection = field(name="hoa-exec")
+    hoax: HoaxSection = field(name="hoax")
     driver: DriverSection = field(default_factory=DriverSection)
     runner: RunnerSection = field(default_factory=RunnerSection)
     log: list[LogSection] = field(default_factory=list)

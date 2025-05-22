@@ -1,5 +1,5 @@
-[hoa-exec]
-name = "Interactive hoa-exec config"
+[hoax]
+name = "Interactive hoax config"
 version = 1
 default-driver = "user"
 log-level = "info"

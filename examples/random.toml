@@ -1,5 +1,5 @@
-[hoa-exec]
-name = "Random hoa-exec config"
+[hoax]
+name = "Random hoax config"
 version = 1
 default-driver = "flip"
 

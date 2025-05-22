@@ -30,9 +30,9 @@ class Configuration(ABC):
         with open(fname, "rb") as conf_file:
             try:
                 toml = tomli.load(conf_file)
-                assert "hoa-exec" in toml, "Missing mandatory section [hoa-exec]"  # noqa: E501
-                assert "version" in toml["hoa-exec"], "Missing mandatory field [hoa-exec].version"  # noqa: E501
-                conf_version = toml["hoa-exec"]["version"]
+                assert "hoax" in toml, "Missing mandatory section [hoax]"  # noqa: E501
+                assert "version" in toml["hoax"], "Missing mandatory field [hoax].version"  # noqa: E501
+                conf_version = toml["hoax"]["version"]
                 if conf_version == 1:
                     conf = msgspec.convert(toml, type=TomlV1)
                     return TomlConfigV1(fname, conf, a, monitor)
@@ -69,7 +69,7 @@ class TomlConfigV1(Configuration):
 
         aps_left = [ap for ap in aps if ap not in set(d.aps)]
         if aps_left:
-            default_driver = conf.hoa_exec.get_default_driver()
+            default_driver = conf.hoax.get_default_driver()
             d.append(default_driver(aps_left))
         self.driver = d if len(d.drivers) > 1 else d.drivers[0]
         if len(a) > 1:

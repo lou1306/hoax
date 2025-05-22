@@ -8,7 +8,7 @@ The tool requires Python >= 3.12 and [`uv`](https://docs.astral.sh/uv/).
 After cloning this repository:
 
 ```
-cd hoa-exec
+cd hoax
 # Run
 uv run hoax examples/nondet.hoa --config examples/flip.toml
 ```

@@ -12,7 +12,7 @@ At the moment we support a (possibly biased) random driver and an interactive
 one. The plan is to add at least support for JSON inputs (either dictionaries
 or arrays).
 
-Drivers compose, i.e., the user may configure `hoa-exec` so that different 
+Drivers compose, i.e., the user may configure `hoax` so that different 
 APs get values from different sources.
 
 # Runners
@@ -49,7 +49,7 @@ Actions include:
 
 * `Log`: write down information to a log file, or to stdout
 * `Reset`: resets the automaton to its initial state
-* `Quit`: quit `hoa-exec`
+* `Quit`: quit `hoax`
 * `Composite`: a composition of two or more of the above.
 
 For instance, the user may want to log a message and reset the automaton on deadlock.
@@ -58,7 +58,7 @@ deadlock actions. (Only via API currently; scripting support is planned)
 
 # Hooks
 
-Hooks allow to further customize the behaviour of `hoa-exec` by firing an
+Hooks allow to further customize the behaviour of `hoax` by firing an
 action when some specific *condition* is met. These are still far from being
 laid out in detail nor implemented.
 
@@ -75,6 +75,12 @@ Some examples why hooks are useful:
 
 * We might want print a message when specific states have been reached
 
-* Setting up `hoa-exec` for runtime verification (RV) would entail
-  adding a hook whereby meeting the acceptance condition (i.e., detecting a
-  violation or deadlock) should trigger a Log action and possibly a Reset.
+* Setting up `hoax` for runtime verification (RV) would entail
+  adding a hook whereby meeting the acceptance condition should trigger a Log
+  action and possibly a Reset.
+
+# Configuration
+
+The other idea is to keep command-line options to a minimum and rely on `.toml`
+configuration files to have reusable, more-or-less self-documenting descriptions
+of the tool

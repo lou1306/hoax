@@ -1,7 +1,7 @@
 # Main section (mandatory)
-[hoa-exec]
+[hoax]
 # Name for the configuration
-name = "My hoa-exec config"
+name = "My hoax config"
 # Config file version (mandatory)
 version = 1
 # Driver to use when an AP has not been given any driver (defaults to user)
