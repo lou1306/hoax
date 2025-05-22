@@ -18,7 +18,7 @@ class Driver(ABC):
         self.aps = aps
 
     @abstractmethod
-    def get(self) -> dict:
+    def get(self) -> set:
         raise NotImplementedError
 
 
@@ -34,7 +34,7 @@ class CompositeDriver(Driver):
             f"{[ap for ap in self.aps if ap in driver.aps]}"
         self.aps.extend(driver.aps)
 
-    def get(self) -> dict:
+    def get(self) -> set:
         result = set()
         for d in self.drivers:
             result |= d.get()
@@ -71,9 +71,9 @@ class RandomDriver(Driver):
         self.k = len(self.aps)
         self.cum_weights = None
 
-    def get(self) -> dict:
+    def get(self) -> set:
         result = choices(self.pop, k=self.k, cum_weights=self.cum_weights)
-        return {ap: value for ap, value in zip(self.aps, result)}
+        return set(ap for ap, value in zip(self.aps, result) if value)
 
 
 class StreamDriver(Driver):
@@ -83,17 +83,17 @@ class StreamDriver(Driver):
         self.stream = stream
         self.prev = {}
 
-    def get(self) -> dict:
+    def get(self) -> set:
         return self.read_next()
 
-    def read_next(self) -> dict:
+    def read_next(self) -> set:
         raise NotImplementedError
 
 
 class JSONDriver(StreamDriver):
-    def read_next(self) -> dict:
+    def read_next(self) -> set:
         line = self.stream.readline()
-        return loads(line)
+        return set(x for x, y in loads(line) if y)
 
 
 class SimpleTxtDriver(StreamDriver):
