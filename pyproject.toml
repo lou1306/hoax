@@ -2,6 +2,7 @@
 name = "HOAX"
 version = "0.1.0"
 description = "Execute HOA omega-automata"
+license = "MIT"
 authors = [{ name = "Luca Di Stefano", email = "luca.di.stefano@tuwien.ac.at" }]
 requires-python = ">=3.12,<=3.12.3"
 dependencies = [
