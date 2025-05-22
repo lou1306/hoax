@@ -3,7 +3,7 @@ name = "hoa_exec"
 version = "0.1.0"
 description = "Execute a HOA automaton"
 authors = [{ name = "Luca Di Stefano", email = "luca.di.stefano@tuwien.ac.at" }]
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<=3.12.3"
 dependencies = [
     "hoa-utils",
     "typer>=0.15.4,<0.16",
@@ -24,7 +24,7 @@ dev = ["pytest~=5.2"]
 
 [tool.uv.sources]
 hoa-utils = { git = "https://github.com/lou1306/hoa-utils.git" }
-networkit = { git = "https://github.com/networkit/networkit", rev = "534044c" }
+networkit = { git = "https://github.com/networkit/networkit", rev = "06c3fea" }
 
 [build-system]
 requires = ["hatchling"]
