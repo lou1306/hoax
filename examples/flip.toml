@@ -1,0 +1,8 @@
+# Main section (mandatory)
+[hoa-exec]
+# Name for the configuration
+name = "Flip"
+# Config file version (mandatory)
+version = 1
+# Driver to use when an AP has not been given any driver (defaults to user)
+default-driver = "flip"
