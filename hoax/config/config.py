@@ -75,7 +75,7 @@ class TomlConfigV1(Configuration):
         if len(a) > 1:
             self.runner = CompositeRunner(a, d, monitor)
         elif all(
-            x in a[0].hoa.header.properties
+            x in (a[0].hoa.header.properties or [])
             for x in ("complete", "deterministic")
         ):
             self.runner = DetCompleteSingleRunner(a[0], d, monitor)

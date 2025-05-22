@@ -25,7 +25,7 @@ def print_version(version: bool):
 
 
 @app.command()
-def main(
+def hoax(
         files: list[Path],
         config: Annotated[
             Optional[Path],

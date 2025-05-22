@@ -1,7 +1,7 @@
 [project]
-name = "hoa_exec"
+name = "HOAX"
 version = "0.1.0"
-description = "Execute a HOA automaton"
+description = "Execute HOA omega-automata"
 authors = [{ name = "Luca Di Stefano", email = "luca.di.stefano@tuwien.ac.at" }]
 requires-python = ">=3.12,<=3.12.3"
 dependencies = [
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-hoa_exec = "hoa_exec.main:app"
+hoax = "hoax.main:app"
 
 [dependency-groups]
 dev = ["pytest~=5.2"]
