@@ -1,4 +1,4 @@
-from hoa_exec import __version__
+from hoax import __version__
 
 
 def test_version():
