@@ -1,14 +1,22 @@
+## HOAX: Hanoi Omega-Automata eXecutor
 
-The tool requires Python >= 3.10 and Poetry.
+This tool executes one or more automata expressed in HOA format.
+Execution may be customised in several ways by means of config files.
+
+The tool requires Python >= 3.12 and [`uv`](https://docs.astral.sh/uv/).
 
 After cloning this repository:
 
 ```
 cd hoa-exec
-poetry update
-# Optionally, install in your current Python environment
-poetry install
 # Run
-poetry run hoa_exec
+uv run hoax examples/nondet.hoa --config examples/flip.toml
 ```
 
+Use Ctrl-C to stop. Use
+
+```
+uv run hoax --help
+```
+
+For usage instructions.
