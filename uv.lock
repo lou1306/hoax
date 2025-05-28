@@ -53,7 +53,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "hoa-utils" },
-    { name = "lark" },
     { name = "msgpack" },
     { name = "msgspec" },
     { name = "networkit" },
@@ -69,7 +68,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "hoa-utils", git = "https://github.com/lou1306/hoa-utils.git" },
-    { name = "lark", specifier = ">=1.2.2,<2" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "msgspec", specifier = ">=0.18.6,<0.19" },
     { name = "networkit", git = "https://github.com/networkit/networkit?rev=06c3fea" },
