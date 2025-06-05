@@ -55,7 +55,7 @@ def hoax(
         if config is not None
         else DefaultConfig(automata, monitor))
 
-    run = conf.get_runner()
+    run = conf.runner
 
     t = datetime.now()
     run.init()

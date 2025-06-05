@@ -24,8 +24,8 @@ class Driver(ABC):
 
 class CompositeDriver(Driver):
     def __init__(self) -> None:
-        self.aps = []
-        self.drivers = []
+        self.aps: list[str] = []
+        self.drivers: list[Driver] = []
 
     def append(self, driver: Driver):
         self.drivers.append(driver)
@@ -45,6 +45,7 @@ class UserDriver(Driver):
     def __init__(self, aps: Iterable[str]) -> None:
         super().__init__(aps)
 
+    @staticmethod
     def handle(in_str: str) -> bool:
         in_str = in_str.strip().lower()
         try:
@@ -69,7 +70,7 @@ class RandomDriver(Driver):
     def __init__(self, aps) -> None:
         self.aps = aps
         self.k = len(self.aps)
-        self.cum_weights = None
+        self.cum_weights: tuple[float, int] | None = None
 
     def get(self) -> set:
         result = choices(self.pop, k=self.k, cum_weights=self.cum_weights)

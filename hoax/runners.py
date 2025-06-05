@@ -1,6 +1,7 @@
-import multiprocessing as mp
 from abc import ABC, abstractmethod
 from enum import Enum
+from multiprocessing import Process, Pipe
+from multiprocessing.connection import Connection
 from random import choice
 from typing import Optional, Sequence
 
@@ -11,7 +12,7 @@ from hoa.ast.boolean_expression import PositiveAnd, PositiveOr
 from hoa.core import Edge, State
 from networkit.graph import Graph
 
-from .drivers import Driver
+from .drivers import Driver, UserDriver
 from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse
 
 
@@ -43,7 +44,7 @@ class Runner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def step(self):
+    def step(self, values=Optional[set]):
         raise NotImplementedError
 
     @abstractmethod
@@ -58,11 +59,16 @@ class Runner(ABC):
     def add_deadlock_action(self, action):
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def count(self):
+        raise NotImplementedError
 
-def spawn_runner(pipe: mp.Pipe):  # type: ignore
+
+def spawn_runner(pipe: Connection):  # type: ignore
     fname, monitor = pipe.recv(), pipe.recv()
     aut = parse(fname)
-    runner = SingleRunner(aut, None, monitor)
+    runner = SingleRunner(aut, UserDriver([]), monitor)
     while True:
         data = pipe.recv_bytes()
         msg = msgpack.loads(data)
@@ -73,7 +79,7 @@ def spawn_runner(pipe: mp.Pipe):  # type: ignore
                 break
             case "GET_COUNT":
                 pipe.send(runner.count)
-            case dict(values):
+            case set(values):
                 x = runner.step(values)
                 pipe.send_bytes(msgpack.dumps(x))
                 # pipe.send(x)
@@ -93,11 +99,11 @@ class MPCompositeRunner(Runner):
     def __init__(self, automata: Sequence[Automaton], drv: Driver,
                  monitor: bool = False) -> None:
         self.driver = drv
-        self.runners = []
+        self.runners: list[Runner] = []
         self.procs = []
         for a in automata:
-            parent_pipe, child_pipe = mp.Pipe()
-            proc = mp.Process(target=spawn_runner, args=(child_pipe,))
+            parent_pipe, child_pipe = Pipe()
+            proc = Process(target=spawn_runner, args=(child_pipe,))
             self.procs.append((proc, parent_pipe))
             parent_pipe.send(a.filename)
             parent_pipe.send(monitor)
@@ -118,8 +124,8 @@ class MPCompositeRunner(Runner):
         for _, pipe in self.procs:
             pipe.send_bytes(MPCompositeRunner.INIT_MSG)
 
-    def step(self):
-        values = self.driver.get()
+    def step(self, inputs: Optional[set] = None):
+        values = inputs or self.driver.get()
         msg = msgpack.dumps(values)
         for _, pipe in self.procs:
             pipe.send_bytes(msg)
@@ -146,7 +152,7 @@ class CompositeRunner(Runner):
     def __init__(self, automata: Sequence[Automaton], drv: Driver,
                  monitor: bool = False) -> None:
         self.driver = drv
-        self.runners = []
+        self.runners: list[Runner] = []
         for a in automata:
             if all(
                 x in a.hoa.header.properties
@@ -164,8 +170,8 @@ class CompositeRunner(Runner):
         for runner in self.runners:
             runner.init()
 
-    def step(self) -> list[Transition]:
-        values = self.driver.get()
+    def step(self, inputs: Optional[set] = None) -> list[Transition]:
+        values = inputs or self.driver.get()
         result = [tr for r in self.runners for tr in r.step(values)]
         return result
 
@@ -201,6 +207,14 @@ class SingleRunner(Runner):
             chk = AcceptanceChecker.make_checker(self.aut)
             self.transition_hooks.append(Hook(chk, Reset()))
 
+    @property
+    def count(self):
+        return self._count    
+
+    @count.setter
+    def count(self, value: int):
+        self._count = value
+
     def init(self) -> None:
         # TODO support initial state conjunction (alternating automata)
         for x in self.aut.hoa.header.start_states:
@@ -217,8 +231,9 @@ class SingleRunner(Runner):
     def add_deadlock_action(self, action):
         self.deadlock_actions.append(action)
 
-    def step(self, inputs: Optional[dict] = None) -> list[Transition]:
+    def step(self, inputs: Optional[set] = None) -> list[Transition]:
         """return False iff automaton stuttered"""
+        assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
         if self.deterministic:
@@ -243,11 +258,12 @@ class SingleRunner(Runner):
             for hook in self.transition_hooks:
                 hook.run(self)
             return [(old_state, inputs, next_state)]
+        return []
 
 
 class DetCompleteSingleRunner(SingleRunner):
-    def step(self, inputs: Optional[dict] = None) -> list[Transition]:
-        """return False iff automaton stuttered"""
+    def step(self, inputs: Optional[set] = None) -> list[Transition]:
+        assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
         # values = tuple(inputs[x] for x in self.aut.hoa.header.propositions)
@@ -268,7 +284,7 @@ class Reach(Condition):
         self.target = target
 
     def check(self, runner: SingleRunner):
-        return runner.state.index == self.target
+        return runner.state == self.target
 
 
 class Bound(Condition):
@@ -330,11 +346,11 @@ class UserChoice(Action):
     def run(self, runner: SingleRunner) -> None:
         for i, edge in enumerate(runner.candidates):
             print(f"[{i}]\t{fmt_edge(edge, runner.aps)}")
-        choice = -1
-        while not 0 <= choice < len(runner.candidates):
+        choice_int = -1
+        while not 0 <= choice_int < len(runner.candidates):
             choice = input("Choose a transition from above: ")
-            choice = int(choice) if choice.isdecimal() else -1
-        chosen = runner.candidates[choice]
+            choice_int = int(choice) if choice.isdecimal() else -1
+        chosen = runner.candidates[choice_int]
         runner.candidates = [chosen]
 
 
@@ -362,7 +378,7 @@ class PrefixType(Enum):
 
 class AcceptanceChecker(Condition):
     @abstractmethod
-    def check(self, state: int) -> PrefixType | None:
+    def check(self, runner: SingleRunner) -> PrefixType | None:
         pass
 
     @staticmethod
@@ -435,22 +451,24 @@ class BaseChecker(AcceptanceChecker):
         self.aset = aset
         self.aut = aut
         self.uglies = uglies
-        self.name = None
-        self.cache = {}
+        self.name: str | None = None
+        self.cache: dict = {}
 
     def set_filename(self, name: str) -> None:
         self.name = name
 
+    @abstractmethod
+    def check_state(self, state: int) -> PrefixType | None:
+        raise NotImplementedError
+
     def check(self, runner: SingleRunner) -> PrefixType | None:
+        assert runner.state is not None
         try:
             return self.cache[runner.state]
         except KeyError:
             value = self.check_state(runner.state)
             self.cache[runner.state] = value
             return value
-
-    def check_state(state: int) -> PrefixType | None:
-        raise NotImplementedError
 
 
 class Inf(BaseChecker):
