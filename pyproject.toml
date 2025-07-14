@@ -1,6 +1,6 @@
 [project]
 name = "HOAX"
-version = "0.1.0"
+version = "0.1.1"
 description = "Execute HOA omega-automata"
 license = "MIT"
 authors = [{ name = "Luca Di Stefano", email = "luca.di.stefano@tuwien.ac.at" }]
