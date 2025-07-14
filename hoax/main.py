@@ -1,3 +1,4 @@
+import importlib.metadata
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -7,7 +8,6 @@ from typing import Annotated, Optional
 
 import typer
 
-from . import __version__
 from .config.config import Configuration, DefaultConfig
 from .drivers import EndOfFiniteTrace
 from .hoa import parse
@@ -20,7 +20,7 @@ app = typer.Typer()
 
 def print_version(version: bool):
     if version:
-        print(f"hoa_exec {__version__}")
+        print(f"hoax {importlib.metadata.version("hoax")}")
         raise typer.Exit()
 
 
