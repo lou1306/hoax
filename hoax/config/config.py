@@ -1,5 +1,5 @@
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import msgspec
@@ -8,7 +8,7 @@ import tomli
 from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
 from ..runners import (Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
-                       Quit, SingleRunner, UserChoice)
+                       Quit, Runner, SingleRunner, UserChoice)
 from .toml_v1 import TomlV1
 
 
@@ -17,11 +17,25 @@ class ConfigurationError(Exception):
 
 
 class Configuration(ABC):
-    def get_driver(self) -> Driver:
-        return self.driver
+    @property
+    @abstractmethod
+    def driver(self):
+        raise NotImplementedError
 
-    def get_runner(self) -> SingleRunner:
-        return self.runner
+    @driver.setter
+    @abstractmethod
+    def driver(self, value: Driver):
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def runner(self) -> Runner:
+        raise NotImplementedError
+
+    @runner.setter
+    @abstractmethod
+    def runner(self, value: Runner):
+        raise NotImplementedError
 
     @staticmethod
     def factory(fname: Path, a: list[Automaton], monitor: bool = False):
@@ -43,16 +57,53 @@ class Configuration(ABC):
 
 
 class DefaultConfig(Configuration):
+
+    @property
+    def runner(self) -> Runner:
+        return self._runner
+
+    @runner.setter
+    def runner(self, value: Runner):
+        self._runner = value
+
+    @property
+    def driver(self) -> Driver:
+        return self._driver
+
+    @driver.setter
+    def driver(self, value: Driver):
+        self._driver = value
+
+
     def __init__(self, a: list[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
         runner, aut = (
             (SingleRunner, a[0]) if len(a) == 1 else (CompositeRunner, a))
         self.driver = UserDriver(list(aps))
-        self.runner = runner(aut=aut, drv=self.driver, mon=mon)
-        self.runner.nondet_actions.append(UserChoice())
+        if len(a) == 1:
+            self.runner: Runner = SingleRunner(aut=a[0], drv=self.driver, mon=mon)  # noqa: E501
+        else:
+            self.runner = CompositeRunner(automata=a, drv=self.driver, monitor=mon)  # noqa: E501
+        self.runner.add_nondet_action(UserChoice())
 
 
 class TomlConfigV1(Configuration):
+    @property
+    def driver(self) -> Driver:
+        return self._driver
+
+    @driver.setter
+    def driver(self, value: Driver):
+        self._driver = value
+
+    @property
+    def runner(self) -> Runner:
+        return self._runner
+
+    @runner.setter
+    def runner(self, value: Runner):
+        self._runner = value
+
     def __init__(self, fname: Path, conf: TomlV1, a: list[Automaton],
                  monitor: bool = False) -> None:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -73,7 +124,7 @@ class TomlConfigV1(Configuration):
             d.append(default_driver(aps_left))
         self.driver = d if len(d.drivers) > 1 else d.drivers[0]
         if len(a) > 1:
-            self.runner = CompositeRunner(a, d, monitor)
+            self.runner: Runner = CompositeRunner(a, d, monitor)
         elif all(
             x in (a[0].hoa.header.properties or [])
             for x in ("complete", "deterministic")
@@ -85,7 +136,7 @@ class TomlConfigV1(Configuration):
         nondet_action = conf.runner.get_nondet()
         if nondet_action is not None:
             self.runner.add_nondet_action(nondet_action)
-        if conf.runner.bound:
+        if conf.runner.bound > 0:
             bound_cond = Bound(conf.runner.bound)
             self.runner.add_transition_hook(
                 Hook(bound_cond, Quit(cause=bound_cond)))

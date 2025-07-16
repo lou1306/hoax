@@ -53,7 +53,7 @@ class TomlV1(Struct):
         level: Optional[str] = field(default="info")
 
         def get_level(self) -> int:
-            return self.LOG_LEVELS[self.level]
+            return self.LOG_LEVELS[self.level or "info"]
 
         def get_handler(self) -> logging.Handler:
             handler = (
@@ -72,11 +72,11 @@ class TomlV1(Struct):
     class DriverSection(Struct):
         class RandomDriver(Struct):
             aps: set[str | int]
-            bias: Annotated[float, Meta(ge=0, le=1)] = None
+            bias: Annotated[float, Meta(ge=0, le=1)] = -1
 
             def get_driver(self, aps, _) -> drivers.RandomDriver:
                 result = drivers.RandomDriver(extract_aps(aps, self.aps))
-                if self.bias is not None:
+                if self.bias >= 0:
                     result.cum_weights = (self.bias, 1)
                 return result
 
@@ -113,11 +113,11 @@ class TomlV1(Struct):
             "random": runners.RandomChoice(),
             "user": runners.UserChoice()}
 
-        bound: Annotated[int, Meta(gt=0)] = None
+        bound: Annotated[int, Meta(gt=0)] = 0
         nondet: Optional[str] = field(default="first")
 
-        def get_nondet(self) -> runners.Action:
-            return self.NONDET_VALUES[self.nondet]
+        def get_nondet(self) -> runners.Action | None:
+            return self.NONDET_VALUES[self.nondet or "first"]
 
         def __post_init__(self):
             if self.nondet not in self.NONDET_VALUES:

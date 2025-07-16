@@ -3,7 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from sys import intern
-from typing import Collection, Iterable
+from typing import Any, Collection, Iterable, Optional, Sequence
 
 import hoa.ast.boolean_expression as ast
 import hoa.ast.label as ast_label
@@ -29,8 +29,8 @@ def fmt_edge(e: Edge, aps: list[str]) -> str:
     return f"{lbl} --> {tgt}"
 
 
-def extract_aps(all_aps: Iterable[str], aps: Collection[str | int]):
-    tmp = (i if type(i) is str else all_aps[i] for i in aps)
+def extract_aps(all_aps: Sequence[str], aps: Collection[str | int]):
+    tmp = (i if type(i) is str else all_aps[int(i)] for i in aps)
     return [i for i in tmp if i in all_aps]
 
 
@@ -58,13 +58,15 @@ class AbstractTransition(ABC):
     tgt: State
 
 
-@dataclass(frozen=True)
-class Transition(AbstractTransition):
-    edge: Edge
-    aps: list[str]
+# @dataclass(frozen=True)
+# class Transition(AbstractTransition):
+#     edge: Edge
+#     aps: list[str]
 
-    def __str__(self) -> str:
-        return f"{fmt_state(self.src)} -- {fmt_expr(self.edge.label, self.aps)} --> {fmt_state(self.tgt)}"  # noqa: E501
+#     def __str__(self) -> str:
+#         return f"{fmt_state(self.src)} -- {fmt_expr(self.edge.label, self.aps)} --> {fmt_state(self.tgt)}"  # noqa: E501
+
+Transition = tuple[int, set, int]
 
 
 @dataclass(frozen=True)
@@ -76,10 +78,10 @@ class ForcedTransition(AbstractTransition):
 
 
 class Automaton:
-    def __init__(self, aut: HOA, filename: str = None, ctrl: set = None):
+    def __init__(self, aut: HOA, filename: Optional[str] = None, ctrl: Optional[set] = None):  # noqa: E501
         self.hoa = aut
-        self.ctrl = ctrl
-        self.cache = {}
+        self.ctrl = ctrl or set()
+        self.cache: dict[tuple, Any] = {}
         self.filename = filename
         self.states = max(x.index for x in aut.body.state2edges)
         self.int2edges = [None] * (self.states + 1)
@@ -122,7 +124,7 @@ class Automaton:
     def get_edges(self, index: int):
         return self.int2edges[index]
 
-    def evaluate(self, node, valuation):
+    def evaluate(self, node, valuation: set):
         match node:
             case ast_label.LabelAtom():
                 return self.hoa.header.propositions[node.proposition] in valuation  # noqa: E501
@@ -138,12 +140,12 @@ class Automaton:
                 return not self.evaluate(arg, valuation)
         raise Exception(f"Unexpected node {node}")
 
-    def get_candidates(self, index: int, values: dict):
+    def get_candidates(self, index: int, values: set):
         for edge in self.get_edges(index):
             if self.evaluate(edge.label, values):
                 yield edge
 
-    def get_first_candidate(self, index: int, values: dict):
+    def get_first_candidate(self, index: int, values: set):
         key = (get_first_candidate, index, *sorted(values))
         try:
             return self.cache[key]
@@ -191,10 +193,10 @@ def parse(file: str) -> Automaton:
         line for line in input_lines
         if not line.startswith("controllable"))
     # Read in Strix controllable APs
-    control = [x for x in input_lines if x.startswith("controllable")]
-    if control:
-        control = control[0].split(":")[1].split()
-        control = set(int(x) for x in control)
+    control_line = [x for x in input_lines if x.startswith("controllable")]
+    if control_line:
+        control_split = control_line[0].split(":")[1].split()
+        control = set(int(x) for x in control_split)
     else:
         control = set()
     hoa_obj: HOA = __parser(input_string)
