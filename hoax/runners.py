@@ -5,12 +5,12 @@ from multiprocessing.connection import Connection
 from random import choice
 from typing import Optional, Sequence
 
-import msgpack
-import networkit as nk
-from hoa.ast.acceptance import AcceptanceAtom, AtomType
-from hoa.ast.boolean_expression import PositiveAnd, PositiveOr
-from hoa.core import Edge, State
-from networkit.graph import Graph
+import msgpack  # type: ignore
+import networkit as nk  # type: ignore
+from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
+from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
+from hoa.core import Edge, State  # type: ignore
+from networkit.graph import Graph  # type: ignore
 
 from .drivers import Driver, UserDriver
 from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse
@@ -149,6 +149,7 @@ class MPCompositeRunner(Runner):
 
 
 class CompositeRunner(Runner):
+    """Runner for multiple automata, fed by the same driver."""
     def __init__(self, automata: Sequence[Automaton], drv: Driver,
                  monitor: bool = False) -> None:
         self.driver = drv
@@ -189,6 +190,7 @@ class CompositeRunner(Runner):
 
 
 class SingleRunner(Runner):
+    """Runner for a single automaton."""
     def __init__(self, aut: Automaton, drv: Driver, mon: bool = False) -> None:
         self.aut = aut
         self.aps = list(aut.get_aps())
@@ -209,7 +211,7 @@ class SingleRunner(Runner):
 
     @property
     def count(self):
-        return self._count    
+        return self._count
 
     @count.setter
     def count(self, value: int):
@@ -262,11 +264,11 @@ class SingleRunner(Runner):
 
 
 class DetCompleteSingleRunner(SingleRunner):
+    """Optimized `SingleRunner` for deterministic complete automata."""
     def step(self, inputs: Optional[set] = None) -> list[Transition]:
         assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
-        # values = tuple(inputs[x] for x in self.aut.hoa.header.propositions)
         edge = self.aut.get_first_candidate(self.state, inputs)
         next_state = edge.state_conj[0]
         self.count += 1
@@ -277,10 +279,11 @@ class DetCompleteSingleRunner(SingleRunner):
 
 
 class Reach(Condition):
+    """Condition triggered by reaching a target state."""
     def __str__(self) -> str:
         return f"Reach {self.target}"
 
-    def __init__(self, target: State) -> None:
+    def __init__(self, target: int) -> None:
         self.target = target
 
     def check(self, runner: SingleRunner):
@@ -288,6 +291,7 @@ class Reach(Condition):
 
 
 class Bound(Condition):
+    """Condition triggered when an execution reaches a certain length."""
     def __str__(self) -> str:
         return f"Bound: {self.bound}"
 
@@ -299,11 +303,13 @@ class Bound(Condition):
 
 
 class Always(Condition):
+    """Trivial condition, always triggered."""
     def check(self, _):
         return True
 
 
 class Hook:
+    """A Hook is a combination of a triggering condition and an action."""
     def __init__(self, condition: Condition, action: Action) -> None:
         self.condition = condition
         self.action = action
@@ -316,11 +322,13 @@ class Hook:
 
 
 class Reset(Action):
+    """Reset the runner to its initial state."""
     def run(self, runner: SingleRunner) -> None:
         runner.init()
 
 
 class Log(Action):
+    """Write a message to standard output."""
     def __init__(self, msg: str) -> None:
         self.msg = msg
 
@@ -332,17 +340,20 @@ class Log(Action):
 
 
 class PressEnter(Action):
+    """Ask for user confirmation before proceeding."""
     def run(self, _) -> None:
         input("Press [Enter] to continue...")
 
 
 class RandomChoice(Action):
+    """Randomly choose a candidate."""
     def run(self, runner: SingleRunner) -> None:
         chosen = choice(runner.candidates)
         runner.candidates = [chosen]
 
 
 class UserChoice(Action):
+    """Let the user choose a candidate."""
     def run(self, runner: SingleRunner) -> None:
         for i, edge in enumerate(runner.candidates):
             print(f"[{i}]\t{fmt_edge(edge, runner.aps)}")
@@ -355,6 +366,7 @@ class UserChoice(Action):
 
 
 class Quit(Action):
+    """Terminate the runner (and HOAX)."""
     def __init__(self, cause=None):
         super().__init__()
         self.cause = cause
@@ -377,12 +389,25 @@ class PrefixType(Enum):
 
 
 class AcceptanceChecker(Condition):
+    """Checks for satisfaction of an acceptance condition.
+
+    For details, see: https://doi.org/10.48550/arXiv.2507.11126
+    """
     @abstractmethod
     def check(self, runner: SingleRunner) -> PrefixType | None:
         pass
 
     @staticmethod
-    def make_checker(aut: Automaton):
+    def make_checker(aut: Automaton) -> "AcceptanceChecker":
+        """Generate an acceptance checker from the automaton's acceptance \
+            condition.
+
+        Args:
+            aut (Automaton): A HOA automaton
+
+        Returns:
+            AcceptanceChecker: An acceptance checker
+        """
         acond = aut.hoa.header.acceptance.condition
         all_states = aut.states
 
@@ -447,6 +472,7 @@ class AcceptanceChecker(Condition):
 
 
 class BaseChecker(AcceptanceChecker):
+    """Base class for Fin/Inf checkers."""
     def __init__(self, aset: set[int], aut: Automaton, uglies):
         self.aset = aset
         self.aut = aut

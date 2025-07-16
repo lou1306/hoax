@@ -1,16 +1,14 @@
-from abc import ABC
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 from sys import intern
 from typing import Any, Collection, Iterable, Optional, Sequence
 
-import hoa.ast.boolean_expression as ast
-import hoa.ast.label as ast_label
-import networkit as nk
+import hoa.ast.boolean_expression as ast  # type: ignore
+import hoa.ast.label as ast_label  # type: ignore
+import networkit as nk  # type: ignore
 from networkit import Graph
-from hoa.core import HOA, Edge, State
-from hoa.parsers import HOAParser
+from hoa.core import HOA, Edge, State  # type: ignore
+from hoa.parsers import HOAParser  # type: ignore
 
 
 get_first_candidate = intern("get_first_candidate")
@@ -29,12 +27,15 @@ def fmt_edge(e: Edge, aps: list[str]) -> str:
     return f"{lbl} --> {tgt}"
 
 
-def extract_aps(all_aps: Sequence[str], aps: Collection[str | int]):
+def extract_aps(all_aps: Sequence[str], aps: Collection[str | int]) -> list[str]:  # noqa: E501
+    """Return only the propositions from `all_aps` that are in `aps` \
+        (by name or index)."""
     tmp = (i if type(i) is str else all_aps[int(i)] for i in aps)
     return [i for i in tmp if i in all_aps]
 
 
-def fmt_expr(node, aps: list[str]):
+def fmt_expr(node, aps: list[str]) -> str:
+    """Format an expression into a string."""
     def recurse_and_reduce(op: str):
         return op.join(fmt_expr(x, aps) for x in node.operands)
     if isinstance(node, ast_label.LabelAtom):
@@ -52,29 +53,8 @@ def fmt_expr(node, aps: list[str]):
     raise Exception(f"Unexpected node {node}")
 
 
-@dataclass(frozen=True)
-class AbstractTransition(ABC):
-    src: State
-    tgt: State
-
-
-# @dataclass(frozen=True)
-# class Transition(AbstractTransition):
-#     edge: Edge
-#     aps: list[str]
-
-#     def __str__(self) -> str:
-#         return f"{fmt_state(self.src)} -- {fmt_expr(self.edge.label, self.aps)} --> {fmt_state(self.tgt)}"  # noqa: E501
-
 Transition = tuple[int, set, int]
-
-
-@dataclass(frozen=True)
-class ForcedTransition(AbstractTransition):
-    label: str
-
-    def __str__(self) -> str:
-        return f"{fmt_state(self.src)} -- {self.label} --> {fmt_state(self.tgt)}"  # noqa: E501
+"""A transition is a triple (source state, valuation, target state)"""
 
 
 class Automaton:
@@ -84,7 +64,7 @@ class Automaton:
         self.cache: dict[tuple, Any] = {}
         self.filename = filename
         self.states = max(x.index for x in aut.body.state2edges)
-        self.int2edges = [None] * (self.states + 1)
+        self.int2edges: list[Sequence[Edge]] = [()] * (self.states + 1)
         for x, edges in aut.body.state2edges.items():
             self.int2edges[x.index] = edges
 
@@ -113,6 +93,7 @@ class Automaton:
             return result, is_minimal
 
     def get_aps(self):
+        """Yield all the atomic propositions of the automaton."""
         yield from self.hoa.header.propositions
 
     def get_states(self):
@@ -121,10 +102,12 @@ class Automaton:
     def get_initial_states(self):
         yield from self.hoa.header.start_states
 
-    def get_edges(self, index: int):
+    def get_edges(self, index: int) -> Sequence[Edge]:
+        """Yield all the edges from state `index`."""
         return self.int2edges[index]
 
-    def evaluate(self, node, valuation: set):
+    def evaluate(self, node, valuation: set) -> bool:
+        """Evaluate an expression `node` against `valuation`."""
         match node:
             case ast_label.LabelAtom():
                 return self.hoa.header.propositions[node.proposition] in valuation  # noqa: E501
@@ -140,12 +123,22 @@ class Automaton:
                 return not self.evaluate(arg, valuation)
         raise Exception(f"Unexpected node {node}")
 
-    def get_candidates(self, index: int, values: set):
+    def get_candidates(self, index: int, values: set) -> Iterable[Edge]:
+        """Yield all candidate edges rooted in `index` for a given valuation.
+
+        Args:
+            index (int): A state in the automaton.
+            values (set): A valuation.
+
+        Yields:
+            Iterable[Edge]: Edges that `valuation` may trigger.
+        """
         for edge in self.get_edges(index):
             if self.evaluate(edge.label, values):
                 yield edge
 
     def get_first_candidate(self, index: int, values: set):
+        """Return the first potential edge for the valuation `values`"""
         key = (get_first_candidate, index, *sorted(values))
         try:
             return self.cache[key]
@@ -186,6 +179,7 @@ class Automaton:
 
 
 def parse(file: str) -> Automaton:
+    """Wrapper around the base HOA parser."""
     __parser = HOAParser()
     input_string = Path(file).read_text()
     input_lines = Path(file).read_text().splitlines()

@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from io import TextIOWrapper
 from json import loads
 from random import choices
-from typing import Iterable
 
 log = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ class EndOfFiniteTrace(Exception):
 
 
 class Driver(ABC):
-    def __init__(self, aps: Iterable[str]) -> None:
+    def __init__(self, aps: list[str]) -> None:
         log.debug(f"Instantiating {type(self).__name__} for {aps=}")
         self.aps = aps
 
@@ -42,7 +41,7 @@ class CompositeDriver(Driver):
 
 
 class UserDriver(Driver):
-    def __init__(self, aps: Iterable[str]) -> None:
+    def __init__(self, aps: list[str]) -> None:
         super().__init__(aps)
 
     @staticmethod
@@ -82,7 +81,6 @@ class StreamDriver(Driver):
         super().__init__(aps)
         self.diff = diff
         self.stream = stream
-        self.prev = {}
 
     def get(self) -> set:
         return self.read_next()

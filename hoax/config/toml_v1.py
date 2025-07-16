@@ -23,6 +23,11 @@ def resolve(path: str, base_path: Path) -> Path:
 
 
 class TomlV1(Struct):
+    """The HOAX TOML configuration format, v1.
+
+    This class defines a `msgspec` structured format, which directly \
+    encodes to/decodes from TOML.
+    """
 
     class HoaxSection(Struct):
         DRIVERS = {

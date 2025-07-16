@@ -38,7 +38,22 @@ class Configuration(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def factory(fname: Path, a: list[Automaton], monitor: bool = False):
+    def factory(fname: Path, a: list[Automaton], monitor: bool = False) -> "Configuration":  # noqa: E501
+        """Load a configuration file from `fname`.
+
+        Args:
+            fname (Path): Path of the configuration file
+            a (list[Automaton]): Automata to run
+            monitor (bool, optional): True iff automata should be monitored \
+                for acceptance. Defaults to False.
+
+        Raises:
+            ConfigurationError: Something wrong with the provided \
+                configuration file
+
+        Returns:
+            Configuration: An object with configuration details.
+        """
         if fname.suffix != ".toml":
             raise ConfigurationError(f"Unsupported config format {fname.suffix}")  # noqa: E501
         with open(fname, "rb") as conf_file:
@@ -57,6 +72,7 @@ class Configuration(ABC):
 
 
 class DefaultConfig(Configuration):
+    """Class for the default HOAX configuration."""
 
     @property
     def runner(self) -> Runner:
@@ -74,7 +90,6 @@ class DefaultConfig(Configuration):
     def driver(self, value: Driver):
         self._driver = value
 
-
     def __init__(self, a: list[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
         runner, aut = (
@@ -88,6 +103,8 @@ class DefaultConfig(Configuration):
 
 
 class TomlConfigV1(Configuration):
+    """Builds a configuration from a TOML file (version 1)"""
+
     @property
     def driver(self) -> Driver:
         return self._driver
