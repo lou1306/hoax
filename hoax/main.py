@@ -20,7 +20,7 @@ app = typer.Typer()
 
 def print_version(version: bool):
     if version:
-        print(f"hoax {importlib.metadata.version("hoax")}")
+        print(f"hoax {importlib.metadata.version("hoax-hoa-executor")}")
         raise typer.Exit()
 
 
