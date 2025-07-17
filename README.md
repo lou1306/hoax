@@ -3,6 +3,21 @@
 This tool executes one or more automata expressed in HOA format.
 Execution may be customised in several ways by means of config files.
 
+You can obtain it from `pip`:
+
+```sh
+pip install hoax-hoa-executor
+```
+
+If you only need the command-line tool, we recommend using `pipx` or `uv`:
+
+```sh
+pipx install hoax-hoa-executor  # or
+uv tool install hoax-hoa-executor
+```
+
+## Running from sources (developers)
+
 The tool requires Python >= 3.12 and [`uv`](https://docs.astral.sh/uv/).
 
 After cloning this repository:
