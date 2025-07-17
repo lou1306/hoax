@@ -1,0 +1,3 @@
+[submodule "hoa-utils"]
+	path = hoa-utils
+	url = https://github.com/lou1306/hoa-utils.git

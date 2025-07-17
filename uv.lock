@@ -41,15 +41,21 @@ wheels = [
 [[package]]
 name = "hoa-utils"
 version = "0.1.0"
-source = { git = "https://github.com/lou1306/hoa-utils.git?rev=0cb7100#0cb71001ea2a9700cf4a1805e869b1ddcf9bf5ba" }
+source = { directory = "hoa-utils" }
 dependencies = [
     { name = "click" },
     { name = "lark" },
 ]
 
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1.0,<9.0.0" },
+    { name = "lark", specifier = ">=1.2.2,<2.0.0" },
+]
+
 [[package]]
 name = "hoax-hoa-executor"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "hoa-utils" },
@@ -68,7 +74,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hoa-utils", git = "https://github.com/lou1306/hoa-utils.git?rev=0cb7100" },
+    { name = "hoa-utils", directory = "hoa-utils" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "msgspec", specifier = ">=0.18.6,<0.19" },
     { name = "networkit", git = "https://github.com/networkit/networkit?rev=06c3fea" },

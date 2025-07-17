@@ -30,7 +30,7 @@ dev = [
 [tool.uv]
 
 [tool.uv.sources]
-hoa-utils = { git = "https://github.com/lou1306/hoa-utils.git", rev = "0cb7100" }
+hoa-utils = { path = "./hoa-utils" }
 networkit = { git = "https://github.com/networkit/networkit", rev = "06c3fea" }
 
 [build-system]
