@@ -20,3 +20,18 @@ uv run hoax --help
 ```
 
 For usage instructions.
+
+## Publications 
+
+If you use `hoax` in an academic project, please cite this paper:
+
+```
+@inproceedings{distefano2025executionmonitoringhoaautomata,
+    title={Execution and monitoring of {HOA} automata with {HOAX}}, 
+    author={Di Stefano, Luca},
+    year={2025},
+    booktitle={25th International Conference on Runtime Verification ({RV})}
+    url={https://arxiv.org/abs/2507.11126},
+    pubstate={To appear}
+}
+```

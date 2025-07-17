@@ -2,6 +2,7 @@
 name = "hoax-hoa-executor"
 version = "0.1.2"
 description = "Execute HOA omega-automata"
+readme = "README.md"
 license = "MIT"
 authors = [{ name = "Luca Di Stefano", email = "luca.di.stefano@tuwien.ac.at" }]
 requires-python = ">=3.12,<=3.12.3"
@@ -38,4 +39,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hoax"]
+packages = ["hoax"]
