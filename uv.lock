@@ -48,7 +48,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "hoax"
+name = "hoax-hoa-executor"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [

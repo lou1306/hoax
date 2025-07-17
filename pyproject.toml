@@ -1,5 +1,5 @@
 [project]
-name = "HOAX"
+name = "hoax-hoa-executor"
 version = "0.1.1"
 description = "Execute HOA omega-automata"
 license = "MIT"
@@ -13,6 +13,10 @@ dependencies = [
     "networkit",
     "msgpack>=1.1.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/lou1306/hoax"
+Issues = "https://github.com/lou1306/hoax/issues"
 
 [project.scripts]
 hoax = "hoax.main:app"
@@ -33,3 +37,5 @@ networkit = { git = "https://github.com/networkit/networkit", rev = "06c3fea" }
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/hoax"]
