@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12, <=3.12.3"
 
 [[package]]
@@ -39,12 +39,16 @@ wheels = [
 ]
 
 [[package]]
-name = "hoa-utils"
-version = "0.1.0"
-source = { git = "https://github.com/lou1306/hoa-utils.git?rev=0cb7100#0cb71001ea2a9700cf4a1805e869b1ddcf9bf5ba" }
+name = "hoa-utils-redux"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "lark" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/98/1885893a9d90be3521743d5a0aa5d2e3b6f066ba15b1a85d98526bc8f16e/hoa_utils_redux-0.1.1.tar.gz", hash = "sha256:90bbe23fc455778e08f96e4344439803a27444dc69971bc2b3dd75b034e4087a", size = 16430, upload-time = "2025-08-25T10:49:10.064Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/36/4e/8c271cc44aa056a3c85ee77ef7e5a71f8aaa5c749c67ca812be2f8375cb5/hoa_utils_redux-0.1.1-py3-none-any.whl", hash = "sha256:464184ec83f548e6ff255983d1d8b171ef09ddcd7fc8f4dc9f258723be4c7c78", size = 26424, upload-time = "2025-08-25T10:49:08.724Z" },
 ]
 
 [[package]]
@@ -52,7 +56,7 @@ name = "hoax-hoa-executor"
 version = "0.1.3"
 source = { editable = "." }
 dependencies = [
-    { name = "hoa-utils" },
+    { name = "hoa-utils-redux" },
     { name = "msgpack" },
     { name = "msgspec" },
     { name = "networkit" },
@@ -68,7 +72,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "hoa-utils", git = "https://github.com/lou1306/hoa-utils.git?rev=0cb7100" },
+    { name = "hoa-utils-redux" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "msgspec", specifier = ">=0.18.6,<0.19" },
     { name = "networkit", git = "https://github.com/networkit/networkit?rev=06c3fea" },

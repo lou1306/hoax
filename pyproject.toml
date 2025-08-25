@@ -1,13 +1,13 @@
 [project]
 name = "hoax-hoa-executor"
-version = "0.1.3"
+version = "0.1.4"
 description = "Execute HOA omega-automata"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Luca Di Stefano", email = "luca.di.stefano@tuwien.ac.at" }]
 requires-python = ">=3.12,<=3.12.3"
 dependencies = [
-    "hoa-utils",
+    "hoa_utils_redux",
     "typer>=0.15.4,<0.16",
     "msgspec>=0.18.6,<0.19",
     "tomli>=2.0.1,<3",
@@ -31,7 +31,6 @@ dev = [
 [tool.uv]
 
 [tool.uv.sources]
-hoa-utils = { git = "https://github.com/lou1306/hoa-utils.git", rev = "0cb7100" }
 networkit = { git = "https://github.com/networkit/networkit", rev = "06c3fea" }
 
 [build-system]
