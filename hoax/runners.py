@@ -156,7 +156,7 @@ class CompositeRunner(Runner):
         self.runners: list[Runner] = []
         for a in automata:
             if all(
-                x in a.hoa.header.properties
+                x in (a.hoa.header.properties or ())
                 for x in ("complete", "deterministic")
             ):
                 self.runners.append(DetCompleteSingleRunner(a, drv, monitor))
