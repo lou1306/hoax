@@ -7,6 +7,7 @@ import subprocess
 import re
 import os
 import tempfile
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -127,13 +128,13 @@ from hoax.drivers import StreamDriver, EndOfFiniteTrace
 class AssumptionTxtDriver(StreamDriver):
     def __init__(self,
                  aps: list[str],
-                 assumption: str = None,
-                 assumption_ins: str = None,
-                 assumption_outs: str = None,
-                 original_hoa: str = None,
+                 assumption: Optional[str] = None,
+                 assumption_ins: Optional[str] = None,
+                 assumption_outs: Optional[str] = None,
+                 original_hoa: Optional[str] = None,
                  bound: int = 20,
                  hoax_config: str = "./examples/random.toml",
-                 stream: TextIOWrapper = None,
+                 stream: Optional[TextIOWrapper] = None,
                  diff: bool = False):
         self.assumption = assumption
         self.ins = assumption_ins
@@ -173,11 +174,13 @@ class AssumptionTxtDriver(StreamDriver):
         trace_name = tmp_trace.name
         tmp_trace.close()
 
+        # in AssumptionTxtDriver._generate_stream(...)
         subprocess.run(
-            f"hoax {monitor_name} --config {self.hoax_config} > {trace_name}",
+            f"hoax  {monitor_name} --config {self.hoax_config} > {trace_name}",
             shell=True,
             check=True,
         )
+
 
         # Step 3: Parse trace to SimpleTxtDriver format
         reformatted = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
