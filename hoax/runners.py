@@ -9,7 +9,7 @@ import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
-from hoa.core import Edge, State  # type: ignore
+from hoa.core import Edge  # type: ignore
 from networkit.graph import Graph  # type: ignore
 
 from .drivers import Driver, UserDriver
