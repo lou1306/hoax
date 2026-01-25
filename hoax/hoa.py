@@ -9,6 +9,7 @@ import networkit as nk  # type: ignore
 from networkit import Graph
 from hoa.core import HOA, Edge, State  # type: ignore
 from hoa.parsers import HOAParser  # type: ignore
+import sympy  # type: ignore
 
 
 get_first_candidate = intern("get_first_candidate")
@@ -195,3 +196,21 @@ def parse(file: str) -> Automaton:
         control = set()
     hoa_obj: HOA = __parser(input_string)
     return Automaton(hoa_obj, filename=file, ctrl=control)
+
+
+def to_sympy(node, symbols=list[sympy.core.symbol.Symbol]) -> sympy.core.expr.Expr:  # noqa: E501
+    """Turn an AST node into a Sympy expression."""
+    match node:
+        case ast_label.LabelAtom():
+            return symbols[node.proposition]
+        case ast.FalseFormula():
+            return False
+        case ast.TrueFormula():
+            return True
+        case ast.And(operands=ops):  # type: ignore
+            return sympy.And(*(to_sympy(x, symbols) for x in ops))
+        case ast.Or(operands=ops):
+            return sympy.Or(*(to_sympy(x, symbols) for x in ops))
+        case ast.Not(argument=arg):
+            return ~to_sympy(arg, symbols)
+    raise Exception(f"Unexpected node {node}")

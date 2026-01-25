@@ -7,13 +7,19 @@ from typing import Optional, Sequence
 
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
+import sympy  # type: ignore
+from bidict import bidict, BidirectionalMapping
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
 from hoa.core import Edge  # type: ignore
 from networkit.graph import Graph  # type: ignore
+from sympy.logic.inference import satisfiable  # type: ignore
+from sympy.utilities.autowrap import autowrap  # type: ignore
+
 
 from .drivers import Driver, UserDriver
-from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse
+from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse, to_sympy
+from .util import powerset
 
 
 class Action(ABC):
@@ -201,7 +207,7 @@ class SingleRunner(Runner):
         self.deadlock_actions: list[Action] = []
         self.nondet_actions: list[Action] = []
         self.transition_hooks: list[Hook] = []
-        self.candidates: list[Edge] = []
+        self.candidates: list[int] = []
         prp = self.aut.hoa.header.properties or []
         self.deterministic = "deterministic" in prp
         # TODO make this configurable
@@ -251,9 +257,8 @@ class SingleRunner(Runner):
             for action in self.nondet_actions:
                 action.run(self)
         if len(self.candidates) >= 1:
-            edge = self.candidates[0]
+            old_state, next_state = self.state, self.candidates[0]
             self.candidates = []
-            old_state, next_state = self.state, edge.state_conj[0]
 
             self.count += 1
             self.state = next_state
@@ -355,8 +360,9 @@ class RandomChoice(Action):
 class UserChoice(Action):
     """Let the user choose a candidate."""
     def run(self, runner: SingleRunner) -> None:
-        for i, edge in enumerate(runner.candidates):
-            print(f"[{i}]\t{fmt_edge(edge, runner.aps)}")
+        for i, candidate in enumerate(runner.candidates):
+            print(f"[{i}]\t{candidate}")
+            # print(f"[{i}]\t{fmt_edge(edge, runner.aps)}")
         choice_int = -1
         while not 0 <= choice_int < len(runner.candidates):
             choice = input("Choose a transition from above: ")
@@ -593,3 +599,69 @@ class Or(AcceptanceChecker):
         if PrefixType.UGLY not in checks:
             return PrefixType.UGLY
         return None
+
+
+class SympyRunner(SingleRunner):
+    def __init__(self, aut: Automaton, drv: Driver, mon: bool = False) -> None:
+        super().__init__(aut, drv, mon)
+        states = aut.hoa.header.nb_states or max(x.index for x in aut.hoa.body.state2edges)  # noqa: E501
+        self.transitions = [None] * (states + 1)
+        self.symbols = [sympy.symbols(ap) for ap in self.aps]
+        self.states_to_index: BidirectionalMapping[int, tuple[int, ...]] = bidict()
+
+    def init(self) -> None:
+        super().init()
+        next_index = 1
+        for state, edges in self.aut.hoa.body.state2edges.items():
+            pieces = []
+            for sub in sorted(powerset(edges), key=len, reverse=True):
+                if len(sub) == 0:
+                    break
+                lbls = [to_sympy(e.label or True, self.symbols) for e in sub]
+                conj = sympy.And(*lbls)
+                if satisfiable(conj, algorithm="pycosat") is not False:
+                    tgts = tuple(sorted(set(e.state_conj[0] for e in sub)))
+                    if tgts not in self.states_to_index.inverse:
+                        self.states_to_index[next_index] = tgts
+                        next_index += 1
+                    idx = self.states_to_index.inverse[tgts]
+                    pieces.append((idx, conj))
+
+            pieces.append((0, True))
+            tr_fun = sympy.Piecewise(*pieces)
+            f = tr_fun.expand()
+            self.transitions[state.index] = autowrap(f, args=self.symbols, backend="cython")  # noqa: E501
+            # self.transitions[state.index] = sympy.lambdify(self.symbols, tr_fun)  # noqa: E501
+
+    def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
+        """return False iff automaton stuttered"""
+        assert self.state is not None
+        if inputs is None:
+            inputs = self.driver.get()
+        tr_fun = self.transitions[self.state]
+        if tr_fun is None:
+            for action in self.deadlock_actions:
+                action.run(self)
+            return ()
+        next_states_id = tr_fun(*[ap in inputs for ap in self.aps])
+        if next_states_id == 0:
+            for action in self.deadlock_actions:
+                action.run(self)
+            return ()
+        self.candidates = self.states_to_index.get(next_states_id, ())
+        if len(self.candidates) > 1:
+            self.candidates = list(self.candidates)
+            for action in self.nondet_actions:
+                action.run(self)
+        old_state, next_state = self.state, self.candidates[0]
+        self.count += 1
+        self.state = next_state
+        for hook in self.transition_hooks:
+            hook.run(self)
+        return ((old_state, "[" + " ".join(inputs) + "]", next_state),)
+
+
+
+
+
+
