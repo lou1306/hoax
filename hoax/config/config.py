@@ -7,8 +7,9 @@ import tomli
 
 from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
-from ..runners import (Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
+from ..runners import (AllsatRunner, Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
                        Quit, Runner, SingleRunner, UserChoice)
+from ..util import PRG_DEFAULT_SEED
 from .toml_v1 import TomlV1
 
 
@@ -35,6 +36,16 @@ class Configuration(ABC):
     @runner.setter
     @abstractmethod
     def runner(self, value: Runner):
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def seed(self) -> int:
+        raise NotImplementedError
+
+    @seed.setter
+    @abstractmethod
+    def seed(self, value: int):
         raise NotImplementedError
 
     @staticmethod
@@ -90,6 +101,10 @@ class DefaultConfig(Configuration):
     def driver(self, value: Driver):
         self._driver = value
 
+    @property
+    def seed(self) -> int:
+        return PRG_DEFAULT_SEED
+
     def __init__(self, a: list[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
         runner, aut = (
@@ -121,6 +136,14 @@ class TomlConfigV1(Configuration):
     def runner(self, value: Runner):
         self._runner = value
 
+    @property
+    def seed(self) -> int:
+        return self._seed
+
+    @seed.setter
+    def seed(self, value: int):
+        self._seed = value
+
     def __init__(self, fname: Path, conf: TomlV1, a: list[Automaton],
                  monitor: bool = False) -> None:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -128,6 +151,8 @@ class TomlConfigV1(Configuration):
         for log_conf in conf.log:
             logging.getLogger().addHandler(log_conf.get_handler())
         self.fname = fname
+        self.seed = conf.hoax.seed
+
         aps = list(ap for aut in a for ap in aut.get_aps())
         d = CompositeDriver()
         for drv_conf in conf.drivers():

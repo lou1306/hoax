@@ -1,10 +1,12 @@
-from itertools import chain, combinations
+import time
 import fastrand  # type: ignore
 from itertools import chain, combinations
 
 
 PRG_BOUNDED = fastrand.pcg32bounded
 PRG_UNIFORM = fastrand.pcg32_uniform
+PRG_DEFAULT_SEED = time.time_ns() & 0xFFFFFFFF
+
 if fastrand.SIXTYFOUR:
     PRG_BOUNDED = fastrand.xorshift128plusbounded
     PRG_UNIFORM = fastrand.xorshift128plus_uniform

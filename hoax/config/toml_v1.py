@@ -8,6 +8,7 @@ from msgspec import Meta, Struct, field
 
 from ..hoa import extract_aps
 from .. import drivers, runners
+from ..util import PRG_DEFAULT_SEED
 
 
 def invalid(field: str, valid: Collection[str]):
@@ -39,11 +40,14 @@ class TomlV1(Struct):
         version: Annotated[int, Meta(ge=1, le=1)]
         name: Optional[str] = None
         default_driver: Optional[str] = field(name="default-driver", default="user")  # noqa: E501
+        seed: Optional[Annotated[int, Meta(ge=0)]] = field(name="seed", default=None)  # noqa: E501
 
         def get_default_driver(self):
             return self.DRIVERS[self.default_driver]
 
         def __post_init__(self):
+            if self.seed is None:
+                self.seed = PRG_DEFAULT_SEED
             if self.default_driver not in self.DRIVERS:
                 invalid("default-driver", self.DRIVERS)
 
