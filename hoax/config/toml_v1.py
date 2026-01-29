@@ -66,7 +66,7 @@ class TomlV1(Struct):
 
         def get_handler(self) -> logging.Handler:
             handler = (
-                logging.StreamHandler(sys.stdout)
+                logging.StreamHandler(sys.stderr)
                 if self.name is None
                 else logging.FileHandler(self.name))
             # TODO add format customization

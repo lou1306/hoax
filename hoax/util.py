@@ -1,6 +1,11 @@
 import time
 import fastrand  # type: ignore
+import logging
 from itertools import chain, combinations
+
+logging.basicConfig()
+logging.root.setLevel(logging.NOTSET)
+logger = logging.getLogger("hoax")
 
 
 PRG_BOUNDED = fastrand.pcg32bounded
