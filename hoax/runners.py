@@ -3,7 +3,7 @@ from enum import Enum
 from multiprocessing import Process, Pipe
 from multiprocessing.connection import Connection
 import sys
-from typing import Optional, Sequence
+from typing import Iterable, Optional, Sequence
 
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
@@ -279,7 +279,7 @@ class DetCompleteSingleRunner(SingleRunner):
         old_state, self.state = self.state, next_state
         for hook in self.transition_hooks:
             hook.run(self)
-        return [(old_state, inputs, next_state)]
+        return ((old_state, inputs, next_state),)
 
 
 class Reach(Condition):

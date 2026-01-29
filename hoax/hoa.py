@@ -54,7 +54,7 @@ def fmt_expr(node, aps: list[str]) -> str:
     raise Exception(f"Unexpected node {node}")
 
 
-Transition = tuple[int, set, int]
+Transition = tuple[int, str, int]
 """A transition is a triple (source state, valuation, target state)"""
 
 
