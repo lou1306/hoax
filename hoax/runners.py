@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from multiprocessing import Process, Pipe
 from multiprocessing.connection import Connection
-from random import choice
+import sys
 from typing import Optional, Sequence
 
 import msgpack  # type: ignore
@@ -18,8 +18,8 @@ from sympy.utilities.autowrap import autowrap  # type: ignore
 
 
 from .drivers import Driver, UserDriver
-from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse, to_sympy
-from .util import powerset
+from .hoa import Automaton, Transition, fmt_state, parse, to_sympy
+from .util import powerset, PRG_BOUNDED
 
 
 class Action(ABC):
@@ -50,7 +50,7 @@ class Runner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def step(self, values=Optional[set]):
+    def step(self, values=Optional[set]) -> Iterable[Transition]:
         raise NotImplementedError
 
     @abstractmethod
@@ -165,7 +165,7 @@ class CompositeRunner(Runner):
                 x in (a.hoa.header.properties or ())
                 for x in ("complete", "deterministic")
             ):
-                self.runners.append(DetCompleteSingleRunner(a, drv, monitor))
+                self.runners.append(SingleRunner(a, drv, monitor))
             else:
                 self.runners.append(SingleRunner(a, drv, monitor))
 
@@ -225,9 +225,11 @@ class SingleRunner(Runner):
 
     def init(self) -> None:
         # TODO support initial state conjunction (alternating automata)
+        # TODO support nondeterministic initial states
         for x in self.aut.hoa.header.start_states:
             for y in x:
                 self.state = y
+                assert self.state is not None
                 return
 
     def add_transition_hook(self, hook):
@@ -239,7 +241,7 @@ class SingleRunner(Runner):
     def add_deadlock_action(self, action):
         self.deadlock_actions.append(action)
 
-    def step(self, inputs: Optional[set] = None) -> list[Transition]:
+    def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
         """return False iff automaton stuttered"""
         assert self.state is not None
         if inputs is None:
@@ -252,20 +254,17 @@ class SingleRunner(Runner):
         if not self.candidates:
             for action in self.deadlock_actions:
                 action.run(self)
-            return []
+            return ()
         elif len(self.candidates) > 1:
             for action in self.nondet_actions:
                 action.run(self)
-        if len(self.candidates) >= 1:
-            old_state, next_state = self.state, self.candidates[0]
-            self.candidates = []
+        old_state, next_state = self.state, self.candidates[0]
 
-            self.count += 1
-            self.state = next_state
-            for hook in self.transition_hooks:
-                hook.run(self)
-            return [(old_state, inputs, next_state)]
-        return []
+        self.count += 1
+        self.state = next_state
+        for hook in self.transition_hooks:
+            hook.run(self)
+        return ((old_state, "[" + " ".join(inputs) + "]", next_state),)
 
 
 class DetCompleteSingleRunner(SingleRunner):
@@ -355,6 +354,8 @@ class RandomChoice(Action):
     def run(self, runner: SingleRunner) -> None:
         chosen = choice(runner.candidates)
         runner.candidates = [chosen]
+        idx = PRG_BOUNDED(len(runner.candidates))
+        runner.candidates[0], runner.candidates[idx] = runner.candidates[idx], runner.candidates[0]  # noqa: E501
 
 
 class UserChoice(Action):
@@ -367,8 +368,7 @@ class UserChoice(Action):
         while not 0 <= choice_int < len(runner.candidates):
             choice = input("Choose a transition from above: ")
             choice_int = int(choice) if choice.isdecimal() else -1
-        chosen = runner.candidates[choice_int]
-        runner.candidates = [chosen]
+        runner.candidates[0], runner.candidates[choice_int] = runner.candidates[choice_int], runner.candidates[0]  # noqa: E501
 
 
 class Quit(Action):

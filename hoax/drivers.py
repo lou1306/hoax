@@ -2,7 +2,8 @@ import logging
 from abc import ABC, abstractmethod
 from io import TextIOWrapper
 from json import loads
-from random import choices
+
+from .util import PRG_UNIFORM
 
 log = logging.getLogger(__name__)
 
@@ -69,10 +70,10 @@ class RandomDriver(Driver):
     def __init__(self, aps) -> None:
         self.aps = aps
         self.k = len(self.aps)
-        self.cum_weights: tuple[float, int] | None = None
+        self.cum_weights: tuple[float, int] | None = (0.5, 1)
 
     def get(self) -> set:
-        result = choices(self.pop, k=self.k, cum_weights=self.cum_weights)
+        result = [PRG_UNIFORM() >= self.cum_weights[0] for _ in range(self.k)]
         return set(ap for ap, value in zip(self.aps, result) if value)
 
 

@@ -78,6 +78,38 @@ wheels = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "3.0.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/78/4802649c64e20f3cf3f7f2afe41f8acd2d4f1dc18d534d4ae36966f253da/fastrand-3.0.8.tar.gz", hash = "sha256:2a19ca7f29949235ee106dbde0584395c253b26c7925b428b72f2f349c016006", size = 9700, upload-time = "2026-01-27T22:18:09.5Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/85/d88b220cf887162f409a2e5e9c1c5ef51cd119ddc618b4c55e4d8cbcb8c2/fastrand-3.0.8-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:027d6ed6ce3fd719ae26499513eed6d20a004e3cbfa92592d0648f3c2026917a", size = 14035, upload-time = "2026-01-27T22:17:41.153Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/20/bf560e71c0168f55b08f2f4f77a7fb991aa1e745dd1b08183679438dce71/fastrand-3.0.8-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:e5c49f62dcaab893dff4e793d31b7ebb54d45c7a258a4ca896fd8febaf1e2879", size = 10959, upload-time = "2026-01-27T22:17:41.876Z" },
+    { url = "https://files.pythonhosted.org/packages/88/09/4e1b517bfe506390a2e940ee70232b0eff8cd13d667b32f3c370cb8ce695/fastrand-3.0.8-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:bbd80d6535a2ac5c38ea4e1cb14f4c176a238c8f04a40b067af03526cc1f2755", size = 11239, upload-time = "2026-01-27T22:17:42.52Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/00/c6aa31351c09faad9ac86101f50455abddaf730e04d766470cd5b6920e50/fastrand-3.0.8-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:6b436a700893c325486bb4148f90fff8d8daa8d986cc47b403babb8c9c75c5f9", size = 21426, upload-time = "2026-01-27T22:17:43.162Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/57/984dd6431e3d9a4f8a78692c525720dd82961421df06016e57b89c786f1e/fastrand-3.0.8-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:f1ee7c71e4ec47ced54156a11803554ec7eb62566f724dd4af2bcb2d2cad4ccf", size = 21149, upload-time = "2026-01-27T22:17:43.855Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/0e/3592d79bd1053cbd4a9dcc57953ac35c3bc1e04ac35014110775e3ad3422/fastrand-3.0.8-cp312-cp312-win_amd64.whl", hash = "sha256:6eac155074b0b9646ba57a6eec2c832fbd24b293d8f710a27d1a785842777d50", size = 13560, upload-time = "2026-01-27T22:17:45.099Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/23/d4aa61f332e4ad4976f5be9a0ec680f96cb3b60cc5128cfe358353a9ddc4/fastrand-3.0.8-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:e85b4bef5b88c0cd9373f855467fa5a86f0c894a6fc2b3a2c59cb70da961b53d", size = 14036, upload-time = "2026-01-27T22:17:46.114Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/58/a71c482e6396efc63a8fa06dc99dfb06c423c73bd44aa6e06637d7a894ee/fastrand-3.0.8-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:00e841eb6e0a337378db588c0fab816d90502efc7c4751a3daaf59d537bb8901", size = 10960, upload-time = "2026-01-27T22:17:46.785Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/31/a824f59d785656f048bec05a0c8d0c40a5b08aff3c70d1f815e38c7ddbf0/fastrand-3.0.8-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:33091d8d82b71b2f91660b9dbde3a6855a27624fa73f77e8856f0dce5c5386ac", size = 11239, upload-time = "2026-01-27T22:17:47.43Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/e9/28e0480546cd02fe8f1bc3e7067f26b42a77221eeceb13db9352470cc62b/fastrand-3.0.8-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:66d1f2f476217289ace691ae46b0e492438d8f996c42ced929ceb1089d71121c", size = 21477, upload-time = "2026-01-27T22:17:48.074Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/d7/ff6c17b4a4ca58c4b971cd4d559da93bdbd72a9b8cbdd3175f12e3b0bf81/fastrand-3.0.8-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:12a4e70fbeee2a411c3ef30bec0a655d7af4aac9bf3e175a13acb547f5c41583", size = 21192, upload-time = "2026-01-27T22:17:49.447Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/8e/c63dded342ddd2fea6ca0c595d325e9688dbf8db8ec266eb53a9189bac11/fastrand-3.0.8-cp313-cp313-win_amd64.whl", hash = "sha256:41440c95b9d3df5e873cc61496bc834a8d3ef87d9266bae88332d592035a0862", size = 13565, upload-time = "2026-01-27T22:17:50.17Z" },
+    { url = "https://files.pythonhosted.org/packages/72/c2/40686d97cf7a59e1b4d6f4ce9975025320bfc6a396b922509434c7741d76/fastrand-3.0.8-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:802c0047a09d700d522c2232836980fb0248334a4b3ec7ccea3c1e20911350f4", size = 14042, upload-time = "2026-01-27T22:17:50.798Z" },
+    { url = "https://files.pythonhosted.org/packages/36/bd/0ab48e28339c8f051154a6dc15ff366479517128c0d7f1088a8f535fcbe2/fastrand-3.0.8-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:4e90ecd74e808ea2071a1f79840219a2c5ac72dea616e5513156447167ed93bf", size = 11029, upload-time = "2026-01-27T22:17:51.486Z" },
+    { url = "https://files.pythonhosted.org/packages/62/c6/f9370b294e06386a909b1c891302dc0d54e1b6fdecd41f00e06a83313f30/fastrand-3.0.8-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:cbbe781b37096899e29581f2c7ec35d59e29a87d4753e05f2eaabe9127d1935a", size = 11245, upload-time = "2026-01-27T22:17:52.135Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/31/3bd64fb135bd8adef7a48b39031040059a644d587068cc7be1f2eea89796/fastrand-3.0.8-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:4c1cc434c2263a896427f869748c9d5d8a7ee247deb8125f105a1c316ac8be5d", size = 21528, upload-time = "2026-01-27T22:17:52.765Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/f8/9eab0406af9c9b16dd8068ececf77b812b57cbd4f414c53fa468610242fe/fastrand-3.0.8-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:613c3d2f47a371f0607237e3c6ec4dec9a74b74dca1662a7b9b4155bdaeca79b", size = 21224, upload-time = "2026-01-27T22:17:53.909Z" },
+    { url = "https://files.pythonhosted.org/packages/72/6c/c2ce2ed588f7f98b51866904fecdf7ea3d73d320c27a7d4f244fe48488cd/fastrand-3.0.8-cp314-cp314-win_amd64.whl", hash = "sha256:9ed302af064a9c05859e958af12330bf41d51ce7b155d283f3012b0e49761115", size = 13740, upload-time = "2026-01-27T22:17:54.684Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/31/441d8c87f65a3ac5bb90f3049a8ac50cd069bad6e0624524309a4a117415/fastrand-3.0.8-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:9c9c0e6aba30a864a59cb6946cb41d4ee723ceb881288d8d015cfce4341aed87", size = 14048, upload-time = "2026-01-27T22:17:55.402Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/d7/e1e2abfeaec74bfc3ab5a8a2efdb516ccc7aee1ced9897df1dbc19c56ede/fastrand-3.0.8-cp314-cp314t-macosx_10_15_x86_64.whl", hash = "sha256:ba6f7a83df17ee00bc905003ef8b11ac08fd41cb119f1f42b4d4dcb48a223ec4", size = 11030, upload-time = "2026-01-27T22:17:56.123Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/d9/4df57fc552a740c057d456fdec58bbc4e849b4723d3c50e9c7386bec32f0/fastrand-3.0.8-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:a8e2ccad2b56dd80638d54fdb4ac3059129bd056f677cb2d1d05e9f5929d0906", size = 11244, upload-time = "2026-01-27T22:17:57.29Z" },
+    { url = "https://files.pythonhosted.org/packages/73/de/273de3e5a0b605c069423241d9b19137f6e24876b4d7f42b134c32ca9cd8/fastrand-3.0.8-cp314-cp314t-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:431382ebd273a08bf24444002f14355cee9304a6668f634c86e7069774140020", size = 21576, upload-time = "2026-01-27T22:17:57.923Z" },
+    { url = "https://files.pythonhosted.org/packages/82/0d/1b12ad028da286b63b67da2096dc379b89e5c88602e76e7ec0020c9e83ca/fastrand-3.0.8-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:07b59a2b6dc68da4a596a6a9fc8b996c795b26148ebe43df21e185c18b36f9a9", size = 21293, upload-time = "2026-01-27T22:17:59.105Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/65/daf8b458c7e7cf6792e2dfd915d066daf242bec56880d9027ac3e08655aa/fastrand-3.0.8-cp314-cp314t-win_amd64.whl", hash = "sha256:bc32b7d08892d2b36987aa83e81394c71705c72cfee7ebf511bd54b61eb68575", size = 13751, upload-time = "2026-01-27T22:17:59.786Z" },
+]
+
+[[package]]
 name = "hoa-utils-redux"
 version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -97,6 +129,7 @@ source = { editable = "." }
 dependencies = [
     { name = "bidict" },
     { name = "cython" },
+    { name = "fastrand" },
     { name = "hoa-utils-redux" },
     { name = "msgpack" },
     { name = "msgspec" },
@@ -118,6 +151,7 @@ dev = [
 requires-dist = [
     { name = "bidict", specifier = ">=0.23.1" },
     { name = "cython", specifier = ">=3.2.4" },
+    { name = "fastrand", specifier = ">=3.0.8" },
     { name = "hoa-utils-redux" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "msgspec", specifier = ">=0.20.0,<1" },
