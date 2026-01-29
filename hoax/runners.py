@@ -1,25 +1,23 @@
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
-from multiprocessing import Process, Pipe
+from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
-import sys
 from typing import Iterable, Optional, Sequence
 
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 import sympy  # type: ignore
-from bidict import bidict, BidirectionalMapping
+from bidict import BidirectionalMapping, bidict
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
-from hoa.core import Edge  # type: ignore
 from networkit.graph import Graph  # type: ignore
 from sympy.logic.inference import satisfiable  # type: ignore
 from sympy.utilities.autowrap import autowrap  # type: ignore
 
-
 from .drivers import Driver, UserDriver
 from .hoa import Automaton, Transition, fmt_state, parse, to_sympy
-from .util import powerset, PRG_BOUNDED
+from .util import PRG_BOUNDED, powerset
 
 
 class Action(ABC):
@@ -247,6 +245,7 @@ class SingleRunner(Runner):
         if inputs is None:
             inputs = self.driver.get()
         if self.deterministic:
+            assert type(self.state) is int
             candidate = self.aut.get_first_candidate(self.state, inputs)
             self.candidates = [candidate] if candidate is not None else []
         else:
@@ -258,7 +257,7 @@ class SingleRunner(Runner):
         elif len(self.candidates) > 1:
             for action in self.nondet_actions:
                 action.run(self)
-        old_state, next_state = self.state, self.candidates[0]
+        old_state, next_state = self.state, self.candidates[0].state_conj[0]
 
         self.count += 1
         self.state = next_state
@@ -352,8 +351,6 @@ class PressEnter(Action):
 class RandomChoice(Action):
     """Randomly choose a candidate."""
     def run(self, runner: SingleRunner) -> None:
-        chosen = choice(runner.candidates)
-        runner.candidates = [chosen]
         idx = PRG_BOUNDED(len(runner.candidates))
         runner.candidates[0], runner.candidates[idx] = runner.candidates[idx], runner.candidates[0]  # noqa: E501
 
@@ -607,7 +604,7 @@ class SympyRunner(SingleRunner):
         states = aut.hoa.header.nb_states or max(x.index for x in aut.hoa.body.state2edges)  # noqa: E501
         self.transitions = [None] * (states + 1)
         self.symbols = [sympy.symbols(ap) for ap in self.aps]
-        self.states_to_index: BidirectionalMapping[int, tuple[int, ...]] = bidict()
+        self.states_to_index: BidirectionalMapping[int, tuple[int, ...]] = bidict()  # noqa: E501
 
     def init(self) -> None:
         super().init()
@@ -661,7 +658,43 @@ class SympyRunner(SingleRunner):
         return ((old_state, "[" + " ".join(inputs) + "]", next_state),)
 
 
+class AllsatRunner(SingleRunner):
+    def __init__(self, aut, drv, mon=False):
+        super().__init__(aut, drv, mon)
+        self.trel: list[list[tuple[str, int]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
+        self.symbols = [sympy.symbols(ap) for ap in self.aps]
 
+    def init(self):
+        super().init()
 
+        def worker(state):
+            edges = self.aut.get_edges(state)
+            for e in edges:
+                lbl = to_sympy(e.label or True, self.symbols)
+                for m in satisfiable(lbl, algorithm="pycosat", all_models=True):  # noqa: E501
+                    if m is False:  # UNSAT
+                        break
+                    m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m.items())  # noqa: E501
+                    m_str = "{" + m_str + "}"
+                    self.trel[state].append((m_str, e.state_conj[0]))
+            self.worker_done[state] = True
 
+        with ThreadPoolExecutor() as exc:
+            exc.map(worker, range(self.aut.states + 1))
+            exc.shutdown(wait=True)
+        print(self.trel)
 
+    def step(self, _: Optional[set] = None) -> list[Transition]:
+        """return False iff automaton stuttered"""
+        assert self.state is not None
+        if not self.trel[self.state]:
+            for action in self.deadlock_actions:
+                action.run(self)
+            return []
+        idx = PRG_BOUNDED(len(self.trel[self.state]))
+        m, next_state = self.trel[self.state][idx]
+        old_state, self.state = self.state, next_state
+        self.count += 1
+        for hook in self.transition_hooks:
+            hook.run(self)
+        return ((old_state, m, self.state),)
