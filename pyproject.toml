@@ -30,6 +30,7 @@ hoax = "hoax.main:app"
 
 [dependency-groups]
 dev = [
+    "isort>=7.0.0",
     "mypy>=1.16.0",
     "pytest~=5.2",
 ]
