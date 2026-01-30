@@ -3,12 +3,12 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
-from typing import Iterable, Optional, Sequence
+from typing import (TYPE_CHECKING, Iterable, Optional, Sequence)
 
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 import sympy  # type: ignore
-from bidict import BidirectionalMapping, bidict
+from bidict import MutableBidirectionalMapping, bidict
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
 from networkit.graph import Graph  # type: ignore
@@ -16,7 +16,8 @@ from sympy.logic.inference import satisfiable  # type: ignore
 from sympy.utilities.autowrap import autowrap  # type: ignore
 
 from .drivers import Driver, UserDriver
-from .hoa import Automaton, Transition, fmt_state, parse, to_sympy
+from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
+                  fmt_state, parse, to_sympy)
 from .util import PRG_BOUNDED, powerset
 
 
@@ -48,7 +49,7 @@ class Runner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def step(self, values=Optional[set]) -> Iterable[Transition]:
+    def step(self, values=Optional[set]) -> Iterable[Transition | PartialTransition]:  # noqa: E501
         raise NotImplementedError
 
     @abstractmethod
@@ -175,7 +176,7 @@ class CompositeRunner(Runner):
         for runner in self.runners:
             runner.init()
 
-    def step(self, inputs: Optional[set] = None) -> list[Transition]:
+    def step(self, inputs: Optional[set] = None) -> Iterable[Transition | PartialTransition]:  # noqa: E501
         values = inputs or self.driver.get()
         result = [tr for r in self.runners for tr in r.step(values)]
         return result
@@ -205,7 +206,7 @@ class SingleRunner(Runner):
         self.deadlock_actions: list[Action] = []
         self.nondet_actions: list[Action] = []
         self.transition_hooks: list[Hook] = []
-        self.candidates: list[int] = []
+        self.candidates: list[tuple[int, str]] = []
         prp = self.aut.hoa.header.properties or []
         self.deterministic = "deterministic" in prp
         # TODO make this configurable
@@ -239,37 +240,44 @@ class SingleRunner(Runner):
     def add_deadlock_action(self, action):
         self.deadlock_actions.append(action)
 
-    def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
-        """return False iff automaton stuttered"""
-        assert self.state is not None
+    def step(self, inputs: Optional[set] = None) -> Iterable[Transition | PartialTransition]:  # noqa: E501
+        if TYPE_CHECKING:
+            assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
         if self.deterministic:
-            assert type(self.state) is int
             candidate = self.aut.get_first_candidate(self.state, inputs)
-            self.candidates = [candidate] if candidate is not None else []
+            if candidate is not None:
+                self.candidates = [
+                    (candidate.state_conj[0], fmt_edge(candidate, self.aps))]
+            else:
+                self.candidates = []
         else:
-            self.candidates = list(self.aut.get_candidates(self.state, inputs))
-        if not self.candidates:
-            for action in self.deadlock_actions:
-                action.run(self)
-            return ()
-        elif len(self.candidates) > 1:
+            candidates = list(self.aut.get_candidates(self.state, inputs))
+            if not candidates:
+                for action in self.deadlock_actions:
+                    action.run(self)
+                return ()
+            self.candidates = [
+                (edge.state_conj[0], fmt_edge(edge, self.aps))
+                for edge in candidates]
+        if len(self.candidates) > 1:
             for action in self.nondet_actions:
                 action.run(self)
-        old_state, next_state = self.state, self.candidates[0].state_conj[0]
+        old_state, next_state = self.state, self.candidates[0][0]
 
         self.count += 1
         self.state = next_state
         for hook in self.transition_hooks:
             hook.run(self)
-        return ((old_state, "[" + " ".join(inputs) + "]", next_state),)
+        return ((old_state, inputs, "[" + " ".join(inputs) + "]", next_state),)
 
 
 class DetCompleteSingleRunner(SingleRunner):
     """Optimized `SingleRunner` for deterministic complete automata."""
-    def step(self, inputs: Optional[set] = None) -> list[Transition]:
-        assert self.state is not None
+    def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
+        if TYPE_CHECKING:
+            assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
         edge = self.aut.get_first_candidate(self.state, inputs)
@@ -278,7 +286,7 @@ class DetCompleteSingleRunner(SingleRunner):
         old_state, self.state = self.state, next_state
         for hook in self.transition_hooks:
             hook.run(self)
-        return ((old_state, inputs, next_state),)
+        return ((old_state, inputs, "[" + " ".join(inputs) + "]", next_state),)
 
 
 class Reach(Condition):
@@ -604,7 +612,7 @@ class SympyRunner(SingleRunner):
         states = aut.hoa.header.nb_states or max(x.index for x in aut.hoa.body.state2edges)  # noqa: E501
         self.transitions = [None] * (states + 1)
         self.symbols = [sympy.symbols(ap) for ap in self.aps]
-        self.states_to_index: BidirectionalMapping[int, tuple[int, ...]] = bidict()  # noqa: E501
+        self.states_to_index: MutableBidirectionalMapping[int, tuple[int, ...]] = bidict()  # noqa: E501
 
     def init(self) -> None:
         super().init()
@@ -631,7 +639,6 @@ class SympyRunner(SingleRunner):
             # self.transitions[state.index] = sympy.lambdify(self.symbols, tr_fun)  # noqa: E501
 
     def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
-        """return False iff automaton stuttered"""
         assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
@@ -645,23 +652,24 @@ class SympyRunner(SingleRunner):
             for action in self.deadlock_actions:
                 action.run(self)
             return ()
-        self.candidates = self.states_to_index.get(next_states_id, ())
+        candidates = self.states_to_index.get(next_states_id, ())
+        self.candidates = [(s, "") for s in candidates]
         if len(self.candidates) > 1:
             self.candidates = list(self.candidates)
             for action in self.nondet_actions:
                 action.run(self)
-        old_state, next_state = self.state, self.candidates[0]
+        old_state, next_state = self.state, self.candidates[0][0]
         self.count += 1
         self.state = next_state
         for hook in self.transition_hooks:
             hook.run(self)
-        return ((old_state, "[" + " ".join(inputs) + "]", next_state),)
+        return ((old_state, inputs, "[" + " ".join(inputs) + "]", next_state),)
 
 
 class AllsatRunner(SingleRunner):
-    def __init__(self, aut, drv, mon=False):
+    def __init__(self, aut, drv, mon=False) -> None:
         super().__init__(aut, drv, mon)
-        self.trel: list[list[tuple[str, int]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
+        self.trel: list[list[tuple[dict, str, int]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
         self.symbols = [sympy.symbols(ap) for ap in self.aps]
 
     def init(self):
@@ -674,9 +682,10 @@ class AllsatRunner(SingleRunner):
                 for m in satisfiable(lbl, algorithm="pycosat", all_models=True):  # noqa: E501
                     if m is False:  # UNSAT
                         break
+                    assert type(m) is dict
                     m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m.items())  # noqa: E501
                     m_str = "{" + m_str + "}"
-                    self.trel[state].append((m_str, e.state_conj[0]))
+                    self.trel[state].append((m, m_str, e.state_conj[0]))
             self.worker_done[state] = True
 
         with ThreadPoolExecutor() as exc:
@@ -684,17 +693,17 @@ class AllsatRunner(SingleRunner):
             exc.shutdown(wait=True)
         print(self.trel)
 
-    def step(self, _: Optional[set] = None) -> list[Transition]:
-        """return False iff automaton stuttered"""
-        assert self.state is not None
+    def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
+        if TYPE_CHECKING:
+            assert self.state is not None
         if not self.trel[self.state]:
             for action in self.deadlock_actions:
                 action.run(self)
             return []
         idx = PRG_BOUNDED(len(self.trel[self.state]))
-        m, next_state = self.trel[self.state][idx]
+        m, m_str, next_state = self.trel[self.state][idx]
         old_state, self.state = self.state, next_state
         self.count += 1
         for hook in self.transition_hooks:
             hook.run(self)
-        return ((old_state, m, self.state),)
+        return ((old_state, m, m_str, self.state),)

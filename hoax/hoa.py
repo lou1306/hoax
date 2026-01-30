@@ -54,7 +54,8 @@ def fmt_expr(node, aps: list[str]) -> str:
     raise Exception(f"Unexpected node {node}")
 
 
-Transition = tuple[int, str, int]
+Transition = tuple[int, set, str, int]
+PartialTransition = tuple[int, dict, str, int]
 """A transition is a triple (source state, valuation, target state)"""
 
 
@@ -63,6 +64,7 @@ class Automaton:
         self.hoa = aut
         self.ctrl = ctrl or set()
         self.cache: dict[tuple, Any] = {}
+        self.candidate_cache: dict[tuple, Edge | None] = {}
         self.filename = filename
         self.states = max(x.index for x in aut.body.state2edges)
         self.int2edges: list[Sequence[Edge]] = [()] * (self.states + 1)
@@ -142,14 +144,14 @@ class Automaton:
         """Return the first potential edge for the valuation `values`"""
         key = (get_first_candidate, index, *sorted(values))
         try:
-            return self.cache[key]
+            return self.candidate_cache[key]
         except KeyError:
             for edge in self.get_edges(index):
                 if self.evaluate(edge.label, values):
-                    self.cache[key] = edge
+                    self.candidate_cache[key] = edge
                     return edge
-            self.cache[key] = None
-            return self.cache[key]
+            self.candidate_cache[key] = None
+            return self.candidate_cache[key]
 
     def graph_and_cond(self) -> tuple[Graph, Graph, dict, dict]:
         # Build digraph of automaton

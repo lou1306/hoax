@@ -7,7 +7,7 @@ import tomli
 
 from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
-from ..runners import (AllsatRunner, Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
+from ..runners import (Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
                        Quit, Runner, SingleRunner, UserChoice)
 from ..util import PRG_DEFAULT_SEED
 from .toml_v1 import TomlV1
@@ -104,6 +104,10 @@ class DefaultConfig(Configuration):
     @property
     def seed(self) -> int:
         return PRG_DEFAULT_SEED
+
+    @seed.setter
+    def seed(self, value: int):
+        pass
 
     def __init__(self, a: list[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))

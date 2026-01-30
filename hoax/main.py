@@ -60,8 +60,8 @@ def hoax(
         else DefaultConfig(automata, monitor))
 
     logger.info(f"config read in {datetime.now() - t} s")
+    logger.info(f"Using runner {type(conf.runner).__name__}")
     logger.info(f"Using seed {conf.seed}")
-
 
     t = datetime.now()
     run = conf.runner
@@ -77,18 +77,10 @@ def hoax(
         else:
             while True:
                 tr = run.step()
-                for i, (old_state, m, new_state) in enumerate(tr):
-                    sys.stdout.write(
-                        str(i) +
-                        ": " +
-                        str(old_state) +
-                        " -- " +
-                        m +
-                        " --> " +
-                        str(new_state) +
-                        "\n")
+                for i, (old_state, _, lbl, new_state) in enumerate(tr):
+                    sys.stdout.write(f"{i}: {old_state} -- {lbl} --> {new_state}\n")  # noqa: E501
     except (StopRunner, KeyboardInterrupt, EndOfFiniteTrace) as e:
-        print(f"Stopping due to {repr(e)}", file=sys.stderr)
+        logger.warning(f"Stopping due to {repr(e)}")
     end = datetime.now()
     logger.info(f"{run.count} steps done in {end - t} s")
     logger.info(f"total: {end - t0} s")
