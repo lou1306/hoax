@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 import logging
 from abc import ABC, abstractmethod
 from io import TextIOWrapper
@@ -21,6 +22,10 @@ class Driver(ABC):
     def get(self) -> set:
         raise NotImplementedError
 
+    @abstractmethod
+    def get_drivers(self) -> Iterable["Driver"]:
+        raise NotImplementedError
+
 
 class CompositeDriver(Driver):
     def __init__(self) -> None:
@@ -39,6 +44,9 @@ class CompositeDriver(Driver):
         for d in self.drivers:
             result |= d.get()
         return result
+
+    def get_drivers(self):
+        yield from self.drivers
 
 
 class UserDriver(Driver):
@@ -63,6 +71,9 @@ class UserDriver(Driver):
                 result.add(ap)
         return result
 
+    def get_drivers(self):
+        yield self
+
 
 class RandomDriver(Driver):
     pop = True, False
@@ -76,6 +87,9 @@ class RandomDriver(Driver):
         result = [PRG_UNIFORM() >= self.cum_weights[0] for _ in range(self.k)]
         return set(ap for ap, value in zip(self.aps, result) if value)
 
+    def get_drivers(self):
+        yield self
+
 
 class StreamDriver(Driver):
     def __init__(self, aps, stream: TextIOWrapper, diff: bool = False) -> None:
@@ -88,6 +102,9 @@ class StreamDriver(Driver):
 
     def read_next(self) -> set:
         raise NotImplementedError
+
+    def get_drivers(self):
+        yield self
 
 
 class JSONDriver(StreamDriver):

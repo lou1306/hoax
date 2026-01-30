@@ -15,7 +15,7 @@ from networkit.graph import Graph  # type: ignore
 from sympy.logic.inference import satisfiable  # type: ignore
 from sympy.utilities.autowrap import autowrap  # type: ignore
 
-from .drivers import Driver, UserDriver
+from .drivers import Driver, RandomDriver, UserDriver
 from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
                   fmt_state, parse, to_sympy)
 from .util import PRG_BOUNDED, powerset
@@ -71,19 +71,26 @@ class Runner(ABC):
 
     @staticmethod
     def factory(a: Sequence[Automaton], drv: Driver, mon: bool = False) -> "Runner":  # noqa: E501
+        can_use_allsat = False
+        if all(type(d) is RandomDriver for d in drv.get_drivers()):
+            if all(d.cum_weights == (0.5, 1) for d in drv.get_drivers()):
+                can_use_allsat = True
         if len(a) > 1:
             return CompositeRunner(a, drv, mon)
         aut = a[0]
         prp = aut.hoa.header.properties or []
         if all(x in prp for x in ("complete", "deterministic")):
             return DetCompleteSingleRunner(aut, drv, mon)
-        return SympyRunner(aut, drv, mon)
+        return (
+            AllsatRunner(aut, drv, mon)
+            if can_use_allsat
+            else SingleRunner(aut, drv, mon))
 
 
 def spawn_runner(pipe: Connection):  # type: ignore
     fname, monitor = pipe.recv(), pipe.recv()
     aut = parse(fname)
-    runner = SingleRunner(aut, UserDriver([]), monitor)
+    runner = SympyRunner(aut, UserDriver([]), monitor)
     while True:
         data = pipe.recv_bytes()
         msg = msgpack.loads(data)
@@ -182,8 +189,8 @@ class CompositeRunner(Runner):
 
     def step(self, inputs: Optional[set] = None) -> Iterable[Transition | PartialTransition]:  # noqa: E501
         values = inputs or self.driver.get()
-        result = [tr for r in self.runners for tr in r.step(values)]
-        return result
+        return [tr for r in self.runners for tr in r.step(values)]
+
 
     def add_transition_hook(self, hook):
         for runner in self.runners:
