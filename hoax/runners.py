@@ -35,8 +35,8 @@ class Condition(ABC):
     def check(self, runner: "SingleRunner"):
         pass
 
-    def __str__(self) -> str:
-        return type(self).__name__
+    def __repr__(self) -> str:
+        return f"{self} (at {hex(id(self))})"
 
 
 class StopRunner(Exception):
@@ -383,7 +383,7 @@ class Quit(Action):
         self.cause = cause
 
     def run(self, runner):
-        raise StopRunner()
+        raise StopRunner(self.cause)
 
 
 class PrefixType(Enum):
