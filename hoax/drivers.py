@@ -70,7 +70,7 @@ class RandomDriver(Driver):
     def __init__(self, aps) -> None:
         self.aps = aps
         self.k = len(self.aps)
-        self.cum_weights: tuple[float, int] | None = (0.5, 1)
+        self.cum_weights: tuple[float, int] = (0.5, 1)
 
     def get(self) -> set:
         result = [PRG_UNIFORM() >= self.cum_weights[0] for _ in range(self.k)]
