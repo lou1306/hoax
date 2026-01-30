@@ -7,8 +7,8 @@ import tomli
 
 from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
-from ..runners import (Bound, CompositeRunner, DetCompleteSingleRunner, Hook,
-                       Quit, Runner, SingleRunner, UserChoice)
+from ..runners import (Bound, Hook,
+                       Quit, Runner, UserChoice)
 from ..util import PRG_DEFAULT_SEED
 from .toml_v1 import TomlV1
 
@@ -111,13 +111,8 @@ class DefaultConfig(Configuration):
 
     def __init__(self, a: list[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
-        runner, aut = (
-            (SingleRunner, a[0]) if len(a) == 1 else (CompositeRunner, a))
         self.driver = UserDriver(list(aps))
-        if len(a) == 1:
-            self.runner: Runner = SingleRunner(aut=a[0], drv=self.driver, mon=mon)  # noqa: E501
-        else:
-            self.runner = CompositeRunner(automata=a, drv=self.driver, monitor=mon)  # noqa: E501
+        self.runner = Runner.factory(a=a, drv=self.driver, mon=mon)
         self.runner.add_nondet_action(UserChoice())
 
 
@@ -169,16 +164,7 @@ class TomlConfigV1(Configuration):
             default_driver = conf.hoax.get_default_driver()
             d.append(default_driver(aps_left))
         self.driver = d if len(d.drivers) > 1 else d.drivers[0]
-        if len(a) > 1:
-            self.runner: Runner = CompositeRunner(a, d, monitor)
-        elif all(
-            x in (a[0].hoa.header.properties or [])
-            for x in ("complete", "deterministic")
-        ):
-            self.runner = DetCompleteSingleRunner(a[0], d, monitor)
-        else:
-            self.runner = SingleRunner(a[0], d, monitor)
-
+        self.runner = Runner.factory(a, d, monitor)
         nondet_action = conf.runner.get_nondet()
         if nondet_action is not None:
             self.runner.add_nondet_action(nondet_action)

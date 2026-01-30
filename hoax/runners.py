@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
-from typing import (TYPE_CHECKING, Iterable, Optional, Sequence)
+from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
@@ -68,6 +68,16 @@ class Runner(ABC):
     @abstractmethod
     def count(self):
         raise NotImplementedError
+
+    @staticmethod
+    def factory(a: Sequence[Automaton], drv: Driver, mon: bool = False) -> "Runner":  # noqa: E501
+        if len(a) > 1:
+            return CompositeRunner(a, drv, mon)
+        aut = a[0]
+        prp = aut.hoa.header.properties or []
+        if all(x in prp for x in ("complete", "deterministic")):
+            return DetCompleteSingleRunner(aut, drv, mon)
+        return SympyRunner(aut, drv, mon)
 
 
 def spawn_runner(pipe: Connection):  # type: ignore
@@ -160,13 +170,7 @@ class CompositeRunner(Runner):
         self.driver = drv
         self.runners: list[Runner] = []
         for a in automata:
-            if all(
-                x in (a.hoa.header.properties or ())
-                for x in ("complete", "deterministic")
-            ):
-                self.runners.append(SingleRunner(a, drv, monitor))
-            else:
-                self.runners.append(SingleRunner(a, drv, monitor))
+            self.runners.append(Runner.factory((a,), drv, monitor))
 
     @property
     def count(self):
@@ -613,6 +617,7 @@ class SympyRunner(SingleRunner):
         self.transitions = [None] * (states + 1)
         self.symbols = [sympy.symbols(ap) for ap in self.aps]
         self.states_to_index: MutableBidirectionalMapping[int, tuple[int, ...]] = bidict()  # noqa: E501
+        self.cache: dict[tuple, int] = {}
 
     def init(self) -> None:
         super().init()
@@ -636,18 +641,24 @@ class SympyRunner(SingleRunner):
             tr_fun = sympy.Piecewise(*pieces)
             f = tr_fun.expand()
             self.transitions[state.index] = autowrap(f, args=self.symbols, backend="cython")  # noqa: E501
-            # self.transitions[state.index] = sympy.lambdify(self.symbols, tr_fun)  # noqa: E501
 
     def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
         assert self.state is not None
         if inputs is None:
             inputs = self.driver.get()
-        tr_fun = self.transitions[self.state]
-        if tr_fun is None:
-            for action in self.deadlock_actions:
-                action.run(self)
-            return ()
-        next_states_id = tr_fun(*[ap in inputs for ap in self.aps])
+        key = (self.state, *sorted(inputs))
+        try:
+            next_states_id = self.cache[key]
+        except KeyError:
+            tr_fun = self.transitions[self.state]
+            if TYPE_CHECKING:
+                assert tr_fun is not None
+            next_states_id = tr_fun(*[ap in inputs for ap in self.aps])
+            self.cache[key] = next_states_id
+            if tr_fun is None:
+                for action in self.deadlock_actions:
+                    action.run(self)
+                return ()
         if next_states_id == 0:
             for action in self.deadlock_actions:
                 action.run(self)
