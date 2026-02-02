@@ -691,6 +691,8 @@ class AllsatRunner(SingleRunner):
         self.symbols = [sympy.symbols(ap) for ap in self.aps]
 
     def init(self):
+        # TODO add stutter transitions where available
+        # TODO weigh transiions based on AP probability distributions
         super().init()
 
         def worker(state):
@@ -704,7 +706,7 @@ class AllsatRunner(SingleRunner):
                     m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m.items())  # noqa: E501
                     m_str = "{" + m_str + "}"
                     self.trel[state].append((m, m_str, e.state_conj[0]))
-            self.worker_done[state] = True
+                    
 
         with ThreadPoolExecutor() as exc:
             exc.map(worker, range(self.aut.states + 1))
