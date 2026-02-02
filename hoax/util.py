@@ -5,6 +5,7 @@ from itertools import chain, combinations
 
 logging.basicConfig()
 logging.root.setLevel(logging.NOTSET)
+logging.root.handlers.clear()
 logger = logging.getLogger("hoax")
 
 

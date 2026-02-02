@@ -1,12 +1,9 @@
-from collections.abc import Iterable
-import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from io import TextIOWrapper
 from json import loads
 
-from .util import PRG_UNIFORM
-
-log = logging.getLogger(__name__)
+from .util import PRG_UNIFORM, logger
 
 
 class EndOfFiniteTrace(Exception):
@@ -15,8 +12,7 @@ class EndOfFiniteTrace(Exception):
 
 class Driver(ABC):
     def __init__(self, aps: list[str]) -> None:
-        log.debug(f"Instantiating {type(self).__name__} for {aps=}")
-        self.aps = aps
+        logger.debug(f"Instantiating {type(self).__name__} for {aps=}")
 
     @abstractmethod
     def get(self) -> set:
@@ -79,6 +75,7 @@ class RandomDriver(Driver):
     pop = True, False
 
     def __init__(self, aps) -> None:
+        super().__init__(aps)
         self.aps = aps
         self.k = len(self.aps)
         self.cum_weights: tuple[float, int] = (0.5, 1)

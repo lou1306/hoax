@@ -1,4 +1,4 @@
-import logging
+# import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
 from ..runners import (Bound, Hook,
                        Quit, Runner, UserChoice)
-from ..util import PRG_DEFAULT_SEED
+from ..util import PRG_DEFAULT_SEED, logger
 from .toml_v1 import TomlV1
 
 
@@ -145,10 +145,8 @@ class TomlConfigV1(Configuration):
 
     def __init__(self, fname: Path, conf: TomlV1, a: list[Automaton],
                  monitor: bool = False) -> None:
-        logging.getLogger().setLevel(logging.DEBUG)
-        logging.getLogger().handlers.clear()
         for log_conf in conf.log:
-            logging.getLogger().addHandler(log_conf.get_handler())
+            logger.addHandler(log_conf.get_handler())
         self.fname = fname
         self.seed = conf.hoax.seed
 
