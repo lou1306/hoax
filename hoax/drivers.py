@@ -11,7 +11,8 @@ class EndOfFiniteTrace(Exception):
 
 
 class Driver(ABC):
-    def __init__(self, aps: list[str]) -> None:
+    def __init__(self, aps: list[str] | None = None) -> None:
+        self.aps = aps if aps is not None else []
         logger.debug(f"Instantiating {type(self).__name__} for {aps=}")
 
     @abstractmethod
@@ -22,10 +23,16 @@ class Driver(ABC):
     def get_drivers(self) -> Iterable["Driver"]:
         raise NotImplementedError
 
+    def find_driver(self, ap: str) -> "Driver | None":
+        for d in self.get_drivers():
+            if ap in d.aps:
+                return d
+        return None
+
 
 class CompositeDriver(Driver):
     def __init__(self) -> None:
-        self.aps: list[str] = []
+        super().__init__()
         self.drivers: list[Driver] = []
 
     def append(self, driver: Driver):
@@ -76,7 +83,6 @@ class RandomDriver(Driver):
 
     def __init__(self, aps) -> None:
         super().__init__(aps)
-        self.aps = aps
         self.k = len(self.aps)
         self.cum_weights: tuple[float, int] = (0.5, 1)
 
