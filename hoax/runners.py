@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from itertools import chain, product
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from typing import TYPE_CHECKING, Iterable, Optional, Sequence
@@ -18,7 +20,7 @@ from sympy.utilities.autowrap import autowrap  # type: ignore
 from .drivers import Driver, RandomDriver, UserDriver
 from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
                   fmt_state, parse, to_sympy)
-from .util import PRG_BOUNDED, powerset
+from .util import PRG_BOUNDED, allsat, includes, pick, powerset
 
 
 class Action(ABC):
@@ -71,10 +73,6 @@ class Runner(ABC):
 
     @staticmethod
     def factory(a: Sequence[Automaton], drv: Driver, mon: bool = False) -> "Runner":  # noqa: E501
-        can_use_allsat = False
-        if all(type(d) is RandomDriver for d in drv.get_drivers()):
-            if all(d.cum_weights == (0.5, 1) for d in drv.get_drivers()):
-                can_use_allsat = True
         if len(a) > 1:
             return CompositeRunner(a, drv, mon)
         aut = a[0]
@@ -83,7 +81,7 @@ class Runner(ABC):
             return DetCompleteSingleRunner(aut, drv, mon)
         return (
             AllsatRunner(aut, drv, mon)
-            if can_use_allsat
+            if all(type(d) is RandomDriver for d in drv.get_drivers())
             else SingleRunner(aut, drv, mon))
 
 
@@ -689,29 +687,90 @@ class AllsatRunner(SingleRunner):
         super().__init__(aut, drv, mon)
         self.trel: list[list[tuple[dict, str, int]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
         self.symbols = [sympy.symbols(ap) for ap in self.aps]
+        self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
 
     def init(self):
-        # TODO add stutter transitions where available
-        # TODO weigh transiions based on AP probability distributions
         super().init()
+        # Retrieve AP probabilities
+        pr = {}
+        for ap in self.driver.aps:
+            drv = self.driver.find_driver(ap)
+            assert type(drv) is RandomDriver
+            pr[ap] = drv.cum_weights[0]
 
-        def worker(state):
+        def prob(model: dict) -> float:
+            """Compute the probability of a model."""
+            p = 1.0
+            for ap, val in model.items():
+                p *= pr[str(ap)] if val else (1 - pr[str(ap)])
+            return p
+
+        def compute_models(state):
             edges = self.aut.get_edges(state)
+            states2models = defaultdict(list)
+            disj_lbls = sympy.false
             for e in edges:
                 lbl = to_sympy(e.label or True, self.symbols)
-                for m in satisfiable(lbl, algorithm="pycosat", all_models=True):  # noqa: E501
-                    if m is False:  # UNSAT
-                        break
-                    assert type(m) is dict
+                tgt = e.state_conj[0]
+                disj_lbls = sympy.Or(disj_lbls, lbl)
+                for m in allsat(lbl):
+                    print(state, fmt_edge(e, self.aps), m)
+                    states2models[e.state_conj[0]].append(m)
+            # Add implicit stuttering transitions
+            for m in allsat(sympy.Not(disj_lbls)):
+                states2models[state].append(m)
+
+            # "Flesh out" models to cover all (relevant) APs
+            relevant_aps = set(a for m in chain.from_iterable(states2models.values()) for a in m)  # noqa: E501
+            print(relevant_aps)
+            for s in states2models:
+                new_models = []
+                for m in states2models[s]:
+                    missing_aps = relevant_aps - set(m.keys())
+                    if not missing_aps:
+                        new_models.append(m)
+                        continue
+                    for combo in product((True, False), repeat=len(missing_aps)):
+                        m_ext = m.copy()
+                        for ap, val in zip(missing_aps, combo):
+                            m_ext[ap] = val
+                        new_models.append(m_ext)
+                states2models[s] = new_models
+
+            models2states = defaultdict(set)
+            next_states = set(states2models.keys())
+            for s1, s2 in product(next_states, repeat=2):
+                for m1 in states2models[s1]:
+                    k = tuple(sorted(m1.items(), key=lambda x: (str(x[0]), x[1])))  # noqa: E501
+                    models2states[k].update((s1,))
+                    if s1 == s2:
+                        continue
+                    for m2 in states2models[s2]:
+                        if m1 != m2 and includes(m2, m1):
+                            models2states[k].update((s2,))
+
+            cumulative_sum = 0
+
+            trel = []
+            for s in states2models:
+                for m in states2models[s]:
+                    k = tuple(sorted(m.items(), key=lambda x: (str(x[0]), x[1])))  # noqa: E501
+                    m_states = models2states[k]
+                    p_m = prob(m)
+                    p_s_and_m = p_m * (1 / len(m_states))
+                    cumulative_sum += p_s_and_m
+
                     m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m.items())  # noqa: E501
                     m_str = "{" + m_str + "}"
-                    self.trel[state].append((m, m_str, e.state_conj[0]))
-                    
 
-        with ThreadPoolExecutor() as exc:
-            exc.map(worker, range(self.aut.states + 1))
-            exc.shutdown(wait=True)
-        print(self.trel)
+                    trel.append((cumulative_sum, (m, m_str, s)))
+
+            trel[-1] = (1.0, trel[-1][1])
+            self.trel[state] = trel
+
+        for x in range(self.aut.states + 1):
+            compute_models(x)
+        input()
 
     def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
         if TYPE_CHECKING:
@@ -720,8 +779,7 @@ class AllsatRunner(SingleRunner):
             for action in self.deadlock_actions:
                 action.run(self)
             return []
-        idx = PRG_BOUNDED(len(self.trel[self.state]))
-        m, m_str, next_state = self.trel[self.state][idx]
+        m, m_str, next_state = pick(self.trel[self.state])
         old_state, self.state = self.state, next_state
         self.count += 1
         for hook in self.transition_hooks:
