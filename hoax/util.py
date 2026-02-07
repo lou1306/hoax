@@ -1,5 +1,5 @@
 import logging
-import time
+import os
 from collections.abc import Sequence
 from itertools import chain, combinations
 from typing import TYPE_CHECKING, TypeVar
@@ -12,11 +12,10 @@ logging.root.setLevel(logging.NOTSET)
 logging.root.handlers.clear()
 logger = logging.getLogger("hoax")
 
+PRG_DEFAULT_SEED = int.from_bytes(os.urandom(4))
 
 PRG_BOUNDED = fastrand.pcg32bounded
 PRG_UNIFORM = fastrand.pcg32_uniform
-PRG_DEFAULT_SEED = time.time_ns() & 0xFFFFFFFF
-
 if fastrand.SIXTYFOUR:
     PRG_BOUNDED = fastrand.xorshift128plusbounded
     PRG_UNIFORM = fastrand.xorshift128plus_uniform
@@ -28,6 +27,9 @@ def PRG_SEED(seed: int) -> None:
         fastrand.xorshift128plus_seed2(seed)
     else:
         fastrand.pcg32_seed(seed)
+    # Warm up the generator
+    for _ in range(20):
+        PRG_UNIFORM()
 
 
 def powerset(iterable):

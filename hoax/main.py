@@ -12,7 +12,7 @@ from .config.config import Configuration, DefaultConfig
 from .drivers import EndOfFiniteTrace
 from .hoa import parse
 from .runners import StopRunner
-from .util import logger
+from .util import PRG_SEED, logger
 
 signal(SIGPIPE, SIG_DFL)
 
@@ -62,6 +62,7 @@ def hoax(
     logger.info(f"config read in {datetime.now() - t} s")
     logger.info(f"Using runner {type(conf.runner).__name__}")
     logger.info(f"Using seed {conf.seed}")
+    PRG_SEED(conf.seed)
 
     t = datetime.now()
     run = conf.runner
