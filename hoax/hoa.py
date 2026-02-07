@@ -11,6 +11,8 @@ from hoa.core import HOA, Edge, State  # type: ignore
 from hoa.parsers import HOAParser  # type: ignore
 import sympy  # type: ignore
 
+from .util import Model
+
 
 get_first_candidate = intern("get_first_candidate")
 get_trap_set_of = intern("get_trap_set_of")
@@ -55,7 +57,7 @@ def fmt_expr(node, aps: list[str]) -> str:
 
 
 Transition = tuple[int, set, str, int]
-PartialTransition = tuple[int, dict, str, int]
+PartialTransition = tuple[int, Model, str, int]
 """A transition is a triple (source state, valuation, target state)"""
 
 

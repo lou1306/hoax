@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from enum import Enum
 from itertools import chain, product
 from multiprocessing import Pipe, Process
@@ -20,7 +20,7 @@ from sympy.utilities.autowrap import autowrap  # type: ignore
 from .drivers import Driver, RandomDriver, UserDriver
 from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
                   fmt_state, parse, to_sympy)
-from .util import PRG_BOUNDED, allsat, includes, pick, powerset
+from .util import PRG_BOUNDED, Model, allsat, pick, powerset
 
 
 class Action(ABC):
@@ -51,7 +51,7 @@ class Runner(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def step(self, values=Optional[set]) -> Iterable[Transition | PartialTransition]:  # noqa: E501
+    def step(self, inputs=Optional[set]) -> Iterable[Transition | PartialTransition]:  # noqa: E501
         raise NotImplementedError
 
     @abstractmethod
@@ -188,7 +188,6 @@ class CompositeRunner(Runner):
     def step(self, inputs: Optional[set] = None) -> Iterable[Transition | PartialTransition]:  # noqa: E501
         values = inputs or self.driver.get()
         return [tr for r in self.runners for tr in r.step(values)]
-
 
     def add_transition_hook(self, hook):
         for runner in self.runners:
@@ -682,8 +681,8 @@ class SympyRunner(SingleRunner):
 class AllsatRunner(SingleRunner):
     def __init__(self, aut, drv, mon=False) -> None:
         super().__init__(aut, drv, mon)
-        self.trel: list[list[tuple[dict, str, int]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
-        self.symbols = [sympy.symbols(ap) for ap in self.aps]
+        self.trel: list[list[tuple[float, tuple[Model, str, int]]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
+        self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
         self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
 
     def init(self):
@@ -695,13 +694,13 @@ class AllsatRunner(SingleRunner):
             assert type(drv) is RandomDriver
             pr[ap] = drv.cum_weights[0]
 
-        def dict2tuple(d: dict) -> tuple:
+        def dict2tuple(d: dict) -> Model:
             return tuple(sorted(d.items(), key=lambda x: (str(x[0]), x[1])))
 
-        def tuple2dict(t: tuple) -> dict:
+        def tuple2dict(t: Model) -> dict:
             return {sym: val for sym, val in t}
 
-        def prob(model: tuple) -> float:
+        def prob(model: Model) -> float:
             """Compute the probability of a model."""
             p = 1.0
             for ap, val in model:
@@ -709,29 +708,33 @@ class AllsatRunner(SingleRunner):
             assert 0 <= p <= 1, f"Invalid probability {p} for model {model}"
             return p
 
-        def compute_models(state):
+        def compute_models(state: int):
             edges = self.aut.get_edges(state)
-            states2models = defaultdict(set)
+            states2models: dict[int, set[Model]] = defaultdict(set)
             true_ones = []
 
             disj_lbls = sympy.false
             for e in edges:
-                lbl = to_sympy(e.label or True, self.symbols)
+                assert e.label is not None, "Implicit labels are not supported"
+                lbl = to_sympy(e.label, self.symbols)
                 disj_lbls = sympy.Or(disj_lbls, lbl)
-                if str(e.label or "(true)") == "(true)":
-                    true_ones.append(e.state_conj[0])
-                else:
-                    for m in allsat(lbl):
+                for m in allsat(lbl):
+                    if m == {}:
+                        true_ones.append(e.state_conj[0])
+                    else:
                         states2models[e.state_conj[0]].add(dict2tuple(m))
-            # Add implicit stuttering transitions
+            # Add transition for the negation of any labels (if satisfiable)
             for m in allsat(sympy.Not(disj_lbls)):
-                states2models[state].add(dict2tuple(m))
+                # If any of the transitions had [t], go there
+                if true_ones:
+                    for s in true_ones:
+                        states2models[s].add(dict2tuple(m))
+                else:
+                    # We can only stutter
+                    states2models[state].add(dict2tuple(m))
 
             # "Flesh out" models to cover all (relevant) APs
             relevant_aps = set(a[0] for m in chain.from_iterable(states2models.values()) for a in m)  # noqa: E501
-            # If at least one transition has [t] as a label, all APs are relevant
-            if true_ones:
-                relevant_aps.update(self.symbols)
             for s in states2models:
                 new_models = set()
                 for m in states2models[s]:
@@ -739,12 +742,14 @@ class AllsatRunner(SingleRunner):
                     if not missing_aps:
                         new_models.add(m)
                         continue
-                    for combo in product((True, False), repeat=len(missing_aps)):
+                    for combo in product((True, False), repeat=len(missing_aps)):  # noqa: E501
                         m_ext = tuple2dict(m)
                         for ap, val in zip(missing_aps, combo):
                             m_ext[ap] = val
                         new_models.add(dict2tuple(m_ext))
                 states2models[s] = new_models
+            # States that may be reached by tautological labels
+            # can be reached through any model
             for s in true_ones:
                 for combo in product((True, False), repeat=len(relevant_aps)):
                     m_ext = {}
@@ -752,34 +757,35 @@ class AllsatRunner(SingleRunner):
                         m_ext[ap] = val
                     states2models[s].add(dict2tuple(m_ext))
 
-            models2states = defaultdict(set)
+            models2states: dict[tuple, set] = defaultdict(set)
             next_states = set(states2models.keys())
             for s1 in next_states:
                 for m1 in states2models[s1]:
                     models2states[m1].update((s1,))
 
-            cumulative_sum = 0
+            cumulative_sum = 0.0
 
-            trel = []
+            trel: list[tuple[float, tuple[Model, str, int]]] = []
 
             for s in states2models:
                 for m in states2models[s]:
                     m_states = models2states[m]
                     p_m = prob(m)
-                    p_s_and_m = p_m * (1 / len(m_states))
+                    p_s_and_m = p_m / len(m_states)
                     cumulative_sum += p_s_and_m
 
-                    m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m.items())  # noqa: E501
+                    m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m)  # noqa: E501
                     m_str = "{" + m_str + "}"
 
                     trel.append((cumulative_sum, (m, m_str, s)))
 
-            assert cumulative_sum <= 1 + 1e-6, f"Cumulative probability exceeds 1: {cumulative_sum} in {state}"
+            assert cumulative_sum <= 1 + 1e-6, f"Cumulative probability > 1: {cumulative_sum} in {state}"  # noqa: E501
             trel[-1] = (1.0, trel[-1][1])
             self.trel[state] = trel
 
-        for x in range(self.aut.states + 1):
-            compute_models(x)
+        with ThreadPoolExecutor() as executor:
+            f = [executor.submit(compute_models, x) for x in range(self.aut.states + 1)]  # noqa: E501
+            wait(f)
 
     def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
         if TYPE_CHECKING:

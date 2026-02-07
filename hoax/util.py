@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING, TypeVar
 import fastrand  # type: ignore
 from sympy.logic.inference import satisfiable  # type: ignore
 
+
+Model = tuple[tuple[str, bool], ...]
+
+
 logging.basicConfig()
 logging.root.setLevel(logging.NOTSET)
 logging.root.handlers.clear()
@@ -58,7 +62,17 @@ T = TypeVar('T')
 
 
 def pick(pop: Sequence[tuple[float, T]]) -> T:
+    if len(pop) == 1:
+        return pop[0][1]
     r = PRG_UNIFORM()
+    # TODO TODO TODO
+    # low, m, hi = 0, len(pop)// 2, len(pop)
+    # while low < hi:
+    #     if r < pop[m][0]:
+    #         hi = m
+    #     else:
+    #         low = m + 1
+    #     m = (low + hi) // 2
     for cumulative_prob, value in pop:
         if r < cumulative_prob:
             return value
