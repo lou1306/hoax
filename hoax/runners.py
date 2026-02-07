@@ -233,12 +233,9 @@ class SingleRunner(Runner):
 
     def init(self) -> None:
         # TODO support initial state conjunction (alternating automata)
-        # TODO support nondeterministic initial states
-        for x in self.aut.hoa.header.start_states:
-            for y in x:
-                self.state = y
-                assert self.state is not None
-                return
+        start_states = tuple(next(iter(x)) for x in self.aut.hoa.header.start_states or ())  # noqa: E501
+        self.state = start_states[PRG_BOUNDED(len(start_states))]
+        assert self.state is not None
 
     def add_transition_hook(self, hook):
         self.transition_hooks.append(hook)
