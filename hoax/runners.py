@@ -698,64 +698,76 @@ class AllsatRunner(SingleRunner):
             assert type(drv) is RandomDriver
             pr[ap] = drv.cum_weights[0]
 
-        def prob(model: dict) -> float:
+        def dict2tuple(d: dict) -> tuple:
+            return tuple(sorted(d.items(), key=lambda x: (str(x[0]), x[1])))
+
+        def tuple2dict(t: tuple) -> dict:
+            return {sym: val for sym, val in t}
+
+        def prob(model: tuple) -> float:
             """Compute the probability of a model."""
             p = 1.0
-            for ap, val in model.items():
+            for ap, val in model:
                 p *= pr[str(ap)] if val else (1 - pr[str(ap)])
+            assert 0 <= p <= 1, f"Invalid probability {p} for model {model}"
             return p
 
         def compute_models(state):
             edges = self.aut.get_edges(state)
-            states2models = defaultdict(list)
+            states2models = defaultdict(set)
+            true_ones = []
+
             disj_lbls = sympy.false
             for e in edges:
                 lbl = to_sympy(e.label or True, self.symbols)
-                tgt = e.state_conj[0]
                 disj_lbls = sympy.Or(disj_lbls, lbl)
-                for m in allsat(lbl):
-                    print(state, fmt_edge(e, self.aps), m)
-                    states2models[e.state_conj[0]].append(m)
+                if str(e.label or "(true)") == "(true)":
+                    true_ones.append(e.state_conj[0])
+                else:
+                    for m in allsat(lbl):
+                        states2models[e.state_conj[0]].add(dict2tuple(m))
             # Add implicit stuttering transitions
             for m in allsat(sympy.Not(disj_lbls)):
-                states2models[state].append(m)
+                states2models[state].add(dict2tuple(m))
 
             # "Flesh out" models to cover all (relevant) APs
-            relevant_aps = set(a for m in chain.from_iterable(states2models.values()) for a in m)  # noqa: E501
-            print(relevant_aps)
+            relevant_aps = set(a[0] for m in chain.from_iterable(states2models.values()) for a in m)  # noqa: E501
+            # If at least one transition has [t] as a label, all APs are relevant
+            if true_ones:
+                relevant_aps.update(self.symbols)
             for s in states2models:
-                new_models = []
+                new_models = set()
                 for m in states2models[s]:
-                    missing_aps = relevant_aps - set(m.keys())
+                    missing_aps = relevant_aps - set(x[0] for x in m)
                     if not missing_aps:
-                        new_models.append(m)
+                        new_models.add(m)
                         continue
                     for combo in product((True, False), repeat=len(missing_aps)):
-                        m_ext = m.copy()
+                        m_ext = tuple2dict(m)
                         for ap, val in zip(missing_aps, combo):
                             m_ext[ap] = val
-                        new_models.append(m_ext)
+                        new_models.add(dict2tuple(m_ext))
                 states2models[s] = new_models
+            for s in true_ones:
+                for combo in product((True, False), repeat=len(relevant_aps)):
+                    m_ext = {}
+                    for ap, val in zip(relevant_aps, combo):
+                        m_ext[ap] = val
+                    states2models[s].add(dict2tuple(m_ext))
 
             models2states = defaultdict(set)
             next_states = set(states2models.keys())
-            for s1, s2 in product(next_states, repeat=2):
+            for s1 in next_states:
                 for m1 in states2models[s1]:
-                    k = tuple(sorted(m1.items(), key=lambda x: (str(x[0]), x[1])))  # noqa: E501
-                    models2states[k].update((s1,))
-                    if s1 == s2:
-                        continue
-                    for m2 in states2models[s2]:
-                        if m1 != m2 and includes(m2, m1):
-                            models2states[k].update((s2,))
+                    models2states[m1].update((s1,))
 
             cumulative_sum = 0
 
             trel = []
+
             for s in states2models:
                 for m in states2models[s]:
-                    k = tuple(sorted(m.items(), key=lambda x: (str(x[0]), x[1])))  # noqa: E501
-                    m_states = models2states[k]
+                    m_states = models2states[m]
                     p_m = prob(m)
                     p_s_and_m = p_m * (1 / len(m_states))
                     cumulative_sum += p_s_and_m
@@ -765,12 +777,12 @@ class AllsatRunner(SingleRunner):
 
                     trel.append((cumulative_sum, (m, m_str, s)))
 
+            assert cumulative_sum <= 1 + 1e-6, f"Cumulative probability exceeds 1: {cumulative_sum} in {state}"
             trel[-1] = (1.0, trel[-1][1])
             self.trel[state] = trel
 
         for x in range(self.aut.states + 1):
             compute_models(x)
-        input()
 
     def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
         if TYPE_CHECKING:
