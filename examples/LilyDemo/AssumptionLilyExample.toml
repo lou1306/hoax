@@ -1,0 +1,16 @@
+[hoax]
+version = 1
+default-driver = "assumption"
+
+[[driver.assumption]]
+aps = ["cancel", "go"]
+assumption = "G(cancel -> X(go || X go))"
+assumption_ins = "cancel"
+assumption_outs = "go"
+bound = 20
+hoax_config = '../random.toml'
+[[driver.flip]]
+aps = ["grant", "req"]
+[runner]
+nondet = "random"
+bound = 10
