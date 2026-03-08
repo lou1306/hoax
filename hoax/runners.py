@@ -88,7 +88,7 @@ class Runner(ABC):
 def spawn_runner(pipe: Connection):  # type: ignore
     fname, monitor = pipe.recv(), pipe.recv()
     aut = parse(fname)
-    runner = SympyRunner(aut, UserDriver([]), monitor)
+    runner = SingleRunner(aut, UserDriver([]), monitor)
     while True:
         data = pipe.recv_bytes()
         msg = msgpack.loads(data)
@@ -609,73 +609,6 @@ class Or(AcceptanceChecker):
         if PrefixType.UGLY not in checks:
             return PrefixType.UGLY
         return None
-
-
-class SympyRunner(SingleRunner):
-    def __init__(self, aut: Automaton, drv: Driver, mon: bool = False) -> None:
-        super().__init__(aut, drv, mon)
-        states = aut.hoa.header.nb_states or max(x.index for x in aut.hoa.body.state2edges)  # noqa: E501
-        self.transitions = [None] * (states + 1)
-        self.symbols = [sympy.symbols(ap) for ap in self.aps]
-        self.states_to_index: MutableBidirectionalMapping[int, tuple[int, ...]] = bidict()  # noqa: E501
-        self.cache: dict[tuple, int] = {}
-
-    def init(self) -> None:
-        super().init()
-        next_index = 1
-        for state, edges in self.aut.hoa.body.state2edges.items():
-            pieces = []
-            for sub in sorted(powerset(edges), key=len, reverse=True):
-                if len(sub) == 0:
-                    break
-                lbls = [to_sympy(e.label or True, self.symbols) for e in sub]
-                conj = sympy.And(*lbls)
-                if satisfiable(conj, algorithm="pycosat") is not False:
-                    tgts = tuple(sorted(set(e.state_conj[0] for e in sub)))
-                    if tgts not in self.states_to_index.inverse:
-                        self.states_to_index[next_index] = tgts
-                        next_index += 1
-                    idx = self.states_to_index.inverse[tgts]
-                    pieces.append((idx, conj))
-
-            pieces.append((0, True))
-            tr_fun = sympy.Piecewise(*pieces)
-            f = tr_fun.expand()
-            self.transitions[state.index] = autowrap(f, args=self.symbols, backend="cython")  # noqa: E501
-
-    def step(self, inputs: Optional[set] = None) -> Iterable[Transition]:
-        assert self.state is not None
-        if inputs is None:
-            inputs = self.driver.get()
-        key = (self.state, *sorted(inputs))
-        try:
-            next_states_id = self.cache[key]
-        except KeyError:
-            tr_fun = self.transitions[self.state]
-            if TYPE_CHECKING:
-                assert tr_fun is not None
-            next_states_id = tr_fun(*[ap in inputs for ap in self.aps])
-            self.cache[key] = next_states_id
-            if tr_fun is None:
-                for action in self.deadlock_actions:
-                    action.run(self)
-                return ()
-        if next_states_id == 0:
-            for action in self.deadlock_actions:
-                action.run(self)
-            return ()
-        candidates = self.states_to_index.get(next_states_id, ())
-        self.candidates = [(s, "") for s in candidates]
-        if len(self.candidates) > 1:
-            self.candidates = list(self.candidates)
-            for action in self.nondet_actions:
-                action.run(self)
-        old_state, next_state = self.state, self.candidates[0][0]
-        self.count += 1
-        self.state = next_state
-        for hook in self.transition_hooks:
-            hook.run(self)
-        return ((old_state, inputs, "[" + " ".join(inputs) + "]", next_state),)
 
 
 class AllsatRunner(SingleRunner):
