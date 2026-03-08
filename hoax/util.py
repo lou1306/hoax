@@ -11,6 +11,23 @@ from sympy.logic.inference import satisfiable  # type: ignore
 Model = tuple[tuple[str, bool], ...]
 
 
+def dict2tuple(d: dict) -> Model:
+    return tuple(sorted(d.items(), key=lambda x: (str(x[0]), x[1])))
+
+
+def tuple2dict(t: Model) -> dict:
+    return {sym: val for sym, val in t}
+
+
+def prob(model: Model, pr: dict[str, float]) -> float:
+    """Compute the probability of a model."""
+    p = 1.0
+    for ap, val in model:
+        p *= pr[str(ap)] if val else (1 - pr[str(ap)])
+    assert 0 <= p <= 1, f"Invalid probability {p} for model {model}"
+    return p
+
+
 logging.basicConfig()
 logging.root.setLevel(logging.NOTSET)
 logging.root.handlers.clear()

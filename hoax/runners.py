@@ -10,17 +10,15 @@ from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 import sympy  # type: ignore
-from bidict import MutableBidirectionalMapping, bidict
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
 from networkit.graph import Graph  # type: ignore
-from sympy.logic.inference import satisfiable  # type: ignore
-from sympy.utilities.autowrap import autowrap  # type: ignore
 
 from .drivers import Driver, RandomDriver, UserDriver
 from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
                   fmt_state, parse, to_sympy)
-from .util import PRG_BOUNDED, Model, allsat, pick, powerset
+from .util import (PRG_BOUNDED, Model, allsat, dict2tuple, pick, prob,
+                   tuple2dict)
 
 
 class Action(ABC):
@@ -618,106 +616,96 @@ class AllsatRunner(SingleRunner):
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
         self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
 
-    def init(self):
-        super().init()
-        # Retrieve AP probabilities
+    def get_weights(self) -> dict[str, float]:
         pr = {}
         for ap in self.driver.aps:
             drv = self.driver.find_driver(ap)
             assert type(drv) is RandomDriver
             pr[ap] = drv.cum_weights[0]
+        return pr
 
-        def dict2tuple(d: dict) -> Model:
-            return tuple(sorted(d.items(), key=lambda x: (str(x[0]), x[1])))
+    def compute_models(self, state: int, pr: dict[str, float]):
+        edges = self.aut.get_edges(state)
+        states2models: dict[int, set[Model]] = defaultdict(set)
+        true_ones = []
 
-        def tuple2dict(t: Model) -> dict:
-            return {sym: val for sym, val in t}
-
-        def prob(model: Model) -> float:
-            """Compute the probability of a model."""
-            p = 1.0
-            for ap, val in model:
-                p *= pr[str(ap)] if val else (1 - pr[str(ap)])
-            assert 0 <= p <= 1, f"Invalid probability {p} for model {model}"
-            return p
-
-        def compute_models(state: int):
-            edges = self.aut.get_edges(state)
-            states2models: dict[int, set[Model]] = defaultdict(set)
-            true_ones = []
-
-            disj_lbls = sympy.false
-            for e in edges:
-                assert e.label is not None, "Implicit labels are not supported"
-                lbl = to_sympy(e.label, self.symbols)
-                disj_lbls = sympy.Or(disj_lbls, lbl)
-                for m in allsat(lbl):
-                    if m == {}:
-                        true_ones.append(e.state_conj[0])
-                    else:
-                        states2models[e.state_conj[0]].add(dict2tuple(m))
-            # Add transition for the negation of any labels (if satisfiable)
-            for m in allsat(sympy.Not(disj_lbls)):
-                # If any of the transitions had [t], go there
-                if true_ones:
-                    for s in true_ones:
-                        states2models[s].add(dict2tuple(m))
+        disj_lbls = sympy.false
+        for e in edges:
+            assert e.label is not None, "Implicit labels are not supported"
+            lbl = to_sympy(e.label, self.symbols)
+            disj_lbls = sympy.Or(disj_lbls, lbl)
+            for m in allsat(lbl):
+                if m == {}:
+                    true_ones.append(e.state_conj[0])
                 else:
-                    # We can only stutter
-                    states2models[state].add(dict2tuple(m))
+                    states2models[e.state_conj[0]].add(dict2tuple(m))
+        # Add transition for the negation of any labels (if satisfiable)
+        for m in allsat(sympy.Not(disj_lbls)):
+            # If any of the transitions had [t], go there
+            if true_ones:
+                for s in true_ones:
+                    states2models[s].add(dict2tuple(m))
+            else:
+                # We can only stutter
+                states2models[state].add(dict2tuple(m))
 
-            # "Flesh out" models to cover all (relevant) APs
-            relevant_aps = set(a[0] for m in chain.from_iterable(states2models.values()) for a in m)  # noqa: E501
-            for s in states2models:
-                new_models = set()
-                for m in states2models[s]:
-                    missing_aps = relevant_aps - set(x[0] for x in m)
-                    if not missing_aps:
-                        new_models.add(m)
-                        continue
-                    for combo in product((True, False), repeat=len(missing_aps)):  # noqa: E501
-                        m_ext = tuple2dict(m)
-                        for ap, val in zip(missing_aps, combo):
-                            m_ext[ap] = val
-                        new_models.add(dict2tuple(m_ext))
-                states2models[s] = new_models
-            # States that may be reached by tautological labels
-            # can be reached through any model
-            for s in true_ones:
-                for combo in product((True, False), repeat=len(relevant_aps)):
-                    m_ext = {}
-                    for ap, val in zip(relevant_aps, combo):
+        # "Flesh out" models to cover all (relevant) APs
+        relevant_aps = set(a[0] for m in chain.from_iterable(states2models.values()) for a in m)  # noqa: E501
+        for s in states2models:
+            new_models = set()
+            for m in states2models[s]:
+                missing_aps = relevant_aps - set(x[0] for x in m)
+                if not missing_aps:
+                    new_models.add(m)
+                    continue
+                for combo in product((True, False), repeat=len(missing_aps)):  # noqa: E501
+                    m_ext = tuple2dict(m)
+                    for ap, val in zip(missing_aps, combo):
                         m_ext[ap] = val
-                    states2models[s].add(dict2tuple(m_ext))
+                    new_models.add(dict2tuple(m_ext))
+            states2models[s] = new_models
+        # States that may be reached by tautological labels
+        # can be reached through any model
+        for s in true_ones:
+            for combo in product((True, False), repeat=len(relevant_aps)):
+                m_ext = {}
+                for ap, val in zip(relevant_aps, combo):
+                    m_ext[ap] = val
+                states2models[s].add(dict2tuple(m_ext))
 
-            models2states: dict[tuple, set] = defaultdict(set)
-            next_states = set(states2models.keys())
-            for s1 in next_states:
-                for m1 in states2models[s1]:
-                    models2states[m1].update((s1,))
+        models2states: dict[tuple, set] = defaultdict(set)
+        next_states = set(states2models.keys())
+        for s1 in next_states:
+            for m1 in states2models[s1]:
+                models2states[m1].update((s1,))
 
-            cumulative_sum = 0.0
+        cumulative_sum = 0.0
 
-            trel: list[tuple[float, tuple[Model, str, int]]] = []
+        trel: list[tuple[float, tuple[Model, str, int]]] = []
 
-            for s in states2models:
-                for m in states2models[s]:
-                    m_states = models2states[m]
-                    p_m = prob(m)
-                    p_s_and_m = p_m / len(m_states)
-                    cumulative_sum += p_s_and_m
+        for s in states2models:
+            for m in states2models[s]:
+                m_states = models2states[m]
+                p_m = prob(m, pr)
+                p_s_and_m = p_m / len(m_states)
+                cumulative_sum += p_s_and_m
 
-                    m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m)  # noqa: E501
-                    m_str = "{" + m_str + "}"
+                m_str = ";".join(("!" if not value else "")+str(sym) for sym, value in m)  # noqa: E501
+                m_str = "{" + m_str + "}"
 
-                    trel.append((cumulative_sum, (m, m_str, s)))
+                trel.append((cumulative_sum, (m, m_str, s)))
 
-            assert cumulative_sum <= 1 + 1e-6, f"Cumulative probability > 1: {cumulative_sum} in {state}"  # noqa: E501
-            trel[-1] = (1.0, trel[-1][1])
-            self.trel[state] = trel
+        assert cumulative_sum <= 1 + 1e-6, f"Cumulative probability > 1: {cumulative_sum} in {state}"  # noqa: E501
+        trel[-1] = (1.0, trel[-1][1])
+        self.trel[state] = trel
+
+    def init(self):
+        super().init()
+        # Retrieve AP probabilities
+        pr = self.get_weights()
 
         with ThreadPoolExecutor() as executor:
-            f = [executor.submit(compute_models, x) for x in range(self.aut.states + 1)]  # noqa: E501
+            f = [executor.submit(lambda x: self.compute_models(x, pr), x) for x in range(self.aut.states + 1)]  # noqa: E501
             wait(f)
 
     def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
