@@ -721,3 +721,22 @@ class AllsatRunner(SingleRunner):
         for hook in self.transition_hooks:
             hook.run(self)
         return ((old_state, m, m_str, self.state),)
+
+
+class OnTheFlyAllsatRunner(AllsatRunner):
+    """An `AllsatRunner` that computes the transition relation on the fly."""
+
+    def __init__(self, aut, drv, mon=False) -> None:
+        super().__init__(aut, drv, mon)
+        self.pr = self.get_weights()
+
+    def init(self):
+        super(AllsatRunner, self).init()
+        self.compute_models(self.state, self.pr)
+
+    def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
+        if TYPE_CHECKING:
+            assert self.state is not None
+        if not self.trel[self.state]:
+            self.compute_models(self.state, self.pr)
+        return super().step()
