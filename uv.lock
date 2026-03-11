@@ -27,6 +27,18 @@ wheels = [
 ]
 
 [[package]]
+name = "bnet2hoa"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "msgspec" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/eb/abf31839990591fdbbd1e6bf987cccb675d51f6690d93a3baef50d4ec349/bnet2hoa-0.2.0.tar.gz", hash = "sha256:2b5b1951eea0531a995a92a90716e2e90176f6d8857eaeb08b7bb5844eacae3d", size = 170029, upload-time = "2026-03-09T20:31:41.361Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/0a/b01ec11786127e689a45a7610bec413d2dd8efd0f2b554786d139266e5e5/bnet2hoa-0.2.0-py3-none-any.whl", hash = "sha256:b0089ce1fff339a52e2cb683b8e7e87b78bd7ab25b18020e77ed9e233a970a6d", size = 147454, upload-time = "2026-03-09T20:31:39.946Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -111,15 +123,16 @@ wheels = [
 
 [[package]]
 name = "hoa-utils-redux"
-version = "0.1.1"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
+    { name = "interegular" },
     { name = "lark" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/98/1885893a9d90be3521743d5a0aa5d2e3b6f066ba15b1a85d98526bc8f16e/hoa_utils_redux-0.1.1.tar.gz", hash = "sha256:90bbe23fc455778e08f96e4344439803a27444dc69971bc2b3dd75b034e4087a", size = 16430, upload-time = "2025-08-25T10:49:10.064Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/44/f6c570305a145e10fc877a115d3c447047be3b6735b966cc7013974f2841/hoa_utils_redux-0.2.0.tar.gz", hash = "sha256:f1383b03b290340c7042b3b4150620e0bcc6c9f991362c931db8d8110db6f1ee", size = 246948, upload-time = "2026-02-11T15:46:25.302Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/36/4e/8c271cc44aa056a3c85ee77ef7e5a71f8aaa5c749c67ca812be2f8375cb5/hoa_utils_redux-0.1.1-py3-none-any.whl", hash = "sha256:464184ec83f548e6ff255983d1d8b171ef09ddcd7fc8f4dc9f258723be4c7c78", size = 26424, upload-time = "2025-08-25T10:49:08.724Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/c9/b6210bc202c9d37a724528d06582adce7dfdf1f9a3ae82c71c0ad2fdba27/hoa_utils_redux-0.2.0-py3-none-any.whl", hash = "sha256:8a82fa5524006861da828c53d04be1aa3082d79102389d404844cc9ad33d0087", size = 26554, upload-time = "2026-02-11T15:46:26.292Z" },
 ]
 
 [[package]]
@@ -128,14 +141,17 @@ version = "0.1.6"
 source = { editable = "." }
 dependencies = [
     { name = "bidict" },
+    { name = "bnet2hoa" },
     { name = "cython" },
     { name = "fastrand" },
     { name = "hoa-utils-redux" },
+    { name = "lark" },
     { name = "msgpack" },
     { name = "msgspec" },
     { name = "networkit" },
     { name = "pycosat" },
     { name = "setuptools" },
+    { name = "swig" },
     { name = "sympy" },
     { name = "tomli" },
     { name = "typer" },
@@ -151,14 +167,17 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bidict", specifier = ">=0.23.1" },
+    { name = "bnet2hoa", specifier = ">=0.2.0" },
     { name = "cython", specifier = ">=3.2.4" },
     { name = "fastrand", specifier = ">=3.0.8" },
-    { name = "hoa-utils-redux" },
+    { name = "hoa-utils-redux", specifier = ">=0.2.0" },
+    { name = "lark", specifier = ">=1.3.1" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "msgspec", specifier = ">=0.20.0,<1" },
-    { name = "networkit", git = "https://github.com/networkit/networkit?rev=f28fb2c" },
+    { name = "networkit", specifier = ">=11.2.1" },
     { name = "pycosat", specifier = ">=0.6.6" },
     { name = "setuptools", specifier = ">=80.10.1" },
+    { name = "swig", specifier = ">=4.4.1" },
     { name = "sympy", specifier = ">=1.14.0" },
     { name = "tomli", specifier = ">=2.0.1,<3" },
     { name = "typer", specifier = ">=0.21.1" },
@@ -169,6 +188,15 @@ dev = [
     { name = "isort", specifier = ">=7.0.0" },
     { name = "mypy", specifier = ">=1.16.0" },
     { name = "pytest", specifier = "~=5.2" },
+]
+
+[[package]]
+name = "interegular"
+version = "0.3.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dc/9d/8b6dde58a028a3962ce17e84d5fe73758df61378e00ef8ac3d85da34b0ff/interegular-0.3.3.tar.gz", hash = "sha256:d9b697b21b34884711399ba0f0376914b81899ce670032486d0d048344a76600", size = 24705, upload-time = "2024-01-06T23:01:22.372Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/01/72d6472f80651673716d1deda2a5bbb633e563ecf94f4479da5519d69d25/interegular-0.3.3-py37-none-any.whl", hash = "sha256:b0c07007d48c89d6d19f7204972d369b2a77222722e126b6aa63aa721dc3b19c", size = 23635, upload-time = "2024-01-06T23:01:20.829Z" },
 ]
 
 [[package]]
@@ -408,12 +436,21 @@ wheels = [
 
 [[package]]
 name = "networkit"
-version = "11.2"
-source = { git = "https://github.com/networkit/networkit?rev=f28fb2c#f28fb2cc9a49aed30c565bc23b65b9d210ccece6" }
+version = "11.2.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },
     { name = "tabulate" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/99/91/70896ebe40b64646e6fc1b3a91842fab97debfbea76188066e010b80bd7b/networkit-11.2.1.tar.gz", hash = "sha256:3e4766c8e32e83f676fe61358af1bd195ecd3ab996fda803a9a1a7a9af40b725", size = 7330479, upload-time = "2026-01-09T11:11:22.551Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/f9/f13ec4f34f995ec97ad6f129ebb9b605d4014a4584ffc3c628abe3b896a0/networkit-11.2.1-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:d0e7c280f46a22787453239000895d07a41ab4e8db56aa30f204185d7f8d495f", size = 9478314, upload-time = "2026-01-09T11:10:04.29Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/eb/1442c1dc936e3fded65092d1e7b108448cb72764dbd849ffa3bfcc83e903/networkit-11.2.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:986113605c472eaf09a453b062a465a2966772be9864244d75baac95a90c6212", size = 10952954, upload-time = "2026-01-09T11:10:13.209Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/2b/5658c2bd38e5056a0b7219193768182671fc5647ca20134ae560b42b8400/networkit-11.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:7ac666766bffc5428b3992f09c01619a1661d37634ab91ae523776ec0c412698", size = 29897203, upload-time = "2026-01-09T11:10:38.273Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/c8/56fd8a462d3812bf9766b328ec1edadb154cd12058da6f8d2f30d914b84b/networkit-11.2.1-cp313-cp313-macosx_15_0_arm64.whl", hash = "sha256:bc9ce028a0d9dd19feeea8881aa172940ca8e668a35da3e04c3a46ee6ccc0d27", size = 9460186, upload-time = "2026-01-09T11:10:44.135Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/66/73cd49833c0b1f410d09751d535133aeae249b9e58e697a7d5d8558833d4/networkit-11.2.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:7586fb2038609c6335d8061ca586a70572c310c018dbd93150761d39b7741ddb", size = 10947041, upload-time = "2026-01-09T11:10:52.82Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/cc/545bb57126753d10ac4dd069667304c2b17fd896334995e11589758f796e/networkit-11.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:3bb19d0745686f5d1db8baf6f2540237841f004d278a0b03653e37fd3b0865a8", size = 29888472, upload-time = "2026-01-09T11:11:16.204Z" },
 ]
 
 [[package]]
@@ -637,6 +674,31 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
+]
+
+[[package]]
+name = "swig"
+version = "4.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/99/0556919f96b1c291a7ff83793adb328e2a1a5e6cfb379d5acc637cdec959/swig-4.4.1.tar.gz", hash = "sha256:db9a625653f6454530a6c6553d17cf576d7aa2d253c76dc8cdd5979f0cb15012", size = 25956, upload-time = "2025-12-27T03:25:49.609Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/92/5c2d8617871eeda00467afe94a7d58a1ad0217d71a39905ed682da9dfef8/swig-4.4.1-py3-none-macosx_10_9_universal2.whl", hash = "sha256:c185b217d2ed96ef475c48956e52dd3572a63d3aa3344bc45ee3fb4dc339ada0", size = 2592417, upload-time = "2025-12-27T03:25:14.681Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/4d/860e5475fe38b9c7dc36f61d0c370a62b6cc725d2bd11ada1d22a60ff5f7/swig-4.4.1-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:520fde8805b4775ef3814576929b8c44d666220b06d8da625f292192f9e74fe8", size = 1917511, upload-time = "2025-12-27T03:25:18.064Z" },
+    { url = "https://files.pythonhosted.org/packages/84/e1/5cd4de23ff2b1d225279f7c7826191b1dbdb77fc858fe12ee7be2562ddb7/swig-4.4.1-py3-none-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:d8cca45a0e8d1e045a1490ea2d05bc1c49e2c266dbbe5954048e2a93d125ee07", size = 2066284, upload-time = "2025-12-27T03:25:19.624Z" },
+    { url = "https://files.pythonhosted.org/packages/96/42/d49992f3c39c90d3d46c431a4afea60fc16bae542cf07f394b298a1b21b5/swig-4.4.1-py3-none-manylinux2014_s390x.manylinux_2_17_s390x.whl", hash = "sha256:bfe6ce6189fc8b983f65f5ed3db8e1d8be03accb0ec3869f986a8343f014e4d9", size = 1912492, upload-time = "2025-12-27T03:25:21.843Z" },
+    { url = "https://files.pythonhosted.org/packages/10/2e/4baa50fcf932f9d58bc8394b211c7daf3b7ec1e53c08d560142f1bc99cb9/swig-4.4.1-py3-none-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:9c98d7b882b6debe3cbb87e6503858e104162d7ce5ab4cfc23425da2e26e51b5", size = 1979872, upload-time = "2025-12-27T03:25:23.48Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/7b/e3a14d053fa18b0d2e14efcc21883816964ddbe52a0c43018e195a99aba2/swig-4.4.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:ae3da2bf679a4c942a2c100789395d4d167e7da8286018124e4665f5eff43e31", size = 1895896, upload-time = "2025-12-27T03:25:24.98Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/a6/c961a911385a4cc4ae10b4dcbcf5dede0407530e59870ce6e4f7bacce47d/swig-4.4.1-py3-none-manylinux_2_24_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:7945f153f7fc93f1ab280f44a3740d6bbfeec3829f954784ba83990fc61a11a8", size = 1912119, upload-time = "2025-12-27T03:25:27.661Z" },
+    { url = "https://files.pythonhosted.org/packages/86/4b/a08a2673a2fd3185932db110de67a9f6fdfcece6bf9220e18502bf745f7e/swig-4.4.1-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:5a9c74b87151d8247d802bda33f78cab9f27c759f0605b760a8f9c9893b5606b", size = 1885810, upload-time = "2025-12-27T03:25:29.562Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/38/efa343b506221a9d43bb1132f08b29fcb07d4113165f598d8a1ea733a1e4/swig-4.4.1-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:a95ae66aebb8ccce4c50febd496e6927b888d98aba272dd5642fe9312bf61a3b", size = 2950985, upload-time = "2025-12-27T03:25:31.586Z" },
+    { url = "https://files.pythonhosted.org/packages/de/0b/5b46e61798982f3cb0ed54fc30a30bad5fa6e3bdd1d9177e439976f7a7e5/swig-4.4.1-py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:a8f06227e6472832dad3ae34d5bd88710b7bbb109f2927e14a21e6725146e944", size = 2781782, upload-time = "2025-12-27T03:25:33.534Z" },
+    { url = "https://files.pythonhosted.org/packages/17/e6/a15efd9cbf39b1289ee7c1acb8d18824a0c2532b85cdbd93acfdf15ee000/swig-4.4.1-py3-none-musllinux_1_2_i686.whl", hash = "sha256:98d61b45215982dd3a71745dfc31599176ed79d286b58bc712c10ed031432fdf", size = 3272993, upload-time = "2025-12-27T03:25:35.862Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/fa/516b95f9966c57acf1da9f2eb22e4e63104452d6e28686d57b216171ee7c/swig-4.4.1-py3-none-musllinux_1_2_ppc64le.whl", hash = "sha256:b6909a8bd68037ea0df061a52c664431b062dbdfb1eb90768719518c120139d1", size = 3189093, upload-time = "2025-12-27T03:25:38.158Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/03/88ca92d3d8e9dd765a66985202db23745bd26a368570a8d8db9a218bfe90/swig-4.4.1-py3-none-musllinux_1_2_riscv64.whl", hash = "sha256:6a6a6331a5c7759ba5a910aa83aa5d33022b8e691b6cb466635c7fc2238facd2", size = 2967789, upload-time = "2025-12-27T03:25:40.24Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/97/5ca3d750f294048c983edfad1f2ad093a83480494fccb2f2e2496304f965/swig-4.4.1-py3-none-musllinux_1_2_s390x.whl", hash = "sha256:2d076358cded172d2f44b3c617923c593dbae664b3fa45051641f028f7f74010", size = 3203253, upload-time = "2025-12-27T03:25:41.953Z" },
+    { url = "https://files.pythonhosted.org/packages/97/44/96586955c0f08b0b9b6c8b2b68ecb43a815da94d5362cfb6691ede3b9fdf/swig-4.4.1-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:43a0a876b4660f6addb6ae72d14a72324dc1388e1c168ed38bb00fd123048749", size = 3060721, upload-time = "2025-12-27T03:25:44.322Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/2f/7a6b14eea6d0247d3f803649f50df3cf3905714bd82f2c386fcfde9544f3/swig-4.4.1-py3-none-win_amd64.whl", hash = "sha256:4548c06ea2ed60c91f003bbc3892db58e185f572705653ab1470ca770f70495d", size = 2548684, upload-time = "2025-12-27T03:25:46.255Z" },
+    { url = "https://files.pythonhosted.org/packages/26/c1/c316899d55a476ee9433bede6b94899b117c5e4b7947a073ef21053d4a21/swig-4.4.1-py3-none-win_arm64.whl", hash = "sha256:063224fe9a2f22fffc7d3b9add250112630f0e00f5f8dd9b9591ac106560177a", size = 2548683, upload-time = "2025-12-27T03:25:48.319Z" },
 ]
 
 [[package]]
