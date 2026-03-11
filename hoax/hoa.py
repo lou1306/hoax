@@ -73,7 +73,8 @@ class Automaton:
         for x, edges in aut.body.state2edges.items():
             self.int2edges[x.index] = edges
 
-        self.graph, self.cond, self.graph_node2scc, self.cond_node2scc = self.graph_and_cond()  # noqa: E501
+        self.graph, self.cond = None, None
+        self.graph_node2scc, self.cond_node2scc = None, None
 
         # Compute accepting sets
         self.acc_sets = defaultdict(set)
@@ -81,7 +82,12 @@ class Automaton:
             for s in (x.acc_sig or tuple()):
                 self.acc_sets[s].add(x.index)
 
+    def init_monitor_structures(self):
+        if self.graph is None:
+            self.graph, self.cond, self.graph_node2scc, self.cond_node2scc = self.graph_and_cond()  # noqa: E501
+
     def get_trap_set_of(self, index: int) -> tuple[set, bool]:
+        self.init_monitor_structures()
         key = (get_trap_set_of, index)
         try:
             return self.cache[key]

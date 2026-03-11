@@ -424,6 +424,7 @@ class AcceptanceChecker(Condition):
         """
         acond = aut.hoa.header.acceptance.condition
         all_states = aut.states
+        aut.init_monitor_structures()
 
         def get_uglies(accept: set[int]):
             result = set()
@@ -436,12 +437,11 @@ class AcceptanceChecker(Condition):
                     continue
                 # Build graph for k_minus_accept
                 graph = Graph(directed=True)
-
                 for e in aut.graph.iterEdges():
                     if e[0] in k_minus_accept and e[1] in k_minus_accept:
                         graph.addEdge(*e, addMissing=True)
-                for x in accept:
-                    graph.removeNode(x)
+                if graph.numberOfEdges() == 0:
+                    continue
 
                 # Check whether k_minus_accept is acyclic
                 seen = set()
@@ -459,7 +459,7 @@ class AcceptanceChecker(Condition):
 
                     nk.graph.Traversal.DFSfrom(graph, node, callback)
                     if len(dfs) != len(set(dfs)):
-                        result.add(k_minus_accept)
+                        result |= k_minus_accept
                         break
             return result
 
