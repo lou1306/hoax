@@ -1,6 +1,5 @@
 import importlib.metadata
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from signal import SIG_DFL, SIGPIPE, signal
@@ -10,7 +9,7 @@ import typer
 
 from .config.config import Configuration, DefaultConfig
 from .drivers import EndOfFiniteTrace
-from .hoa import parse
+from .hoa import Automaton, LazyAutomaton, parse
 from .runners import StopRunner
 from .util import PRG_SEED, logger
 
@@ -49,9 +48,12 @@ def hoax(
     """Execute HOA automata"""
     t = datetime.now()
     t0 = t
-    with ThreadPoolExecutor() as exc:
-        automata = list(exc.map(parse, files))
-    logger.info(f"parsing done in {datetime.now() - t} s")
+
+    automata: list[Automaton] = [
+        LazyAutomaton.from_bnet(f) if f.suffix == ".bnet" else
+        parse(f) if monitor else LazyAutomaton.from_file(f)
+        for f in files]
+    print(f"Lazy parsing done in {datetime.now() - t} s", file=sys.stderr)
 
     t = datetime.now()
     conf = (
@@ -59,7 +61,7 @@ def hoax(
         if config is not None
         else DefaultConfig(automata, monitor))
 
-    logger.info(f"config read in {datetime.now() - t} s")
+    logger.info(f"Config read in {datetime.now() - t} s")
     logger.info(f"Using runner {type(conf.runner).__name__}")
     logger.info(f"Using seed {conf.seed}")
     PRG_SEED(conf.seed)
@@ -67,9 +69,7 @@ def hoax(
     t = datetime.now()
     run = conf.runner
     run.init()
-
-    logger.info(f"init done in {datetime.now() - t} s")
-
+    logger.info(f"Init done in {datetime.now() - t} s")
     t = datetime.now()
     try:
         if quiet:
