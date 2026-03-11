@@ -78,10 +78,12 @@ class Automaton:
         self.cache: dict[tuple, Any] = {}
         self.candidate_cache: dict[tuple, Edge | None] = {}
         self.filename = filename
-        self.states = max(x.index for x in aut.body.state2edges)
-        self.int2edges: list[Sequence[Edge]] = [()] * (self.states + 1)
-        for x, edges in aut.body.state2edges.items():
-            self.int2edges[x.index] = edges
+        self.states = aut.header.nb_states
+        if self.states is not None:
+            self.int2edges: list[Sequence[Edge]] = [()] * (self.states + 1)
+        if aut.body.state2edges is not None:
+            for x, edges in aut.body.state2edges.items():
+                self.int2edges[x.index] = edges
 
         self.graph, self.cond = None, None
         self.graph_node2scc, self.cond_node2scc = None, None
@@ -125,7 +127,7 @@ class Automaton:
 
     def get_edges(self, index: int) -> Sequence[Edge]:
         """Yield all the edges from state `index`."""
-        return self.int2edges[index]
+        yield from self.int2edges[index]
 
     def evaluate(self, node, valuation: set) -> bool:
         """Evaluate an expression `node` against `valuation`."""

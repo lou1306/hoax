@@ -79,7 +79,7 @@ class Runner(ABC):
         if all(x in prp for x in ("complete", "deterministic")):
             return DetCompleteSingleRunner(aut, drv, mon)
         return (
-            AllsatRunner(aut, drv, mon)
+            OnTheFlyAllsatRunner(aut, drv, mon)
             if all(type(d) is RandomDriver for d in drv.get_drivers())
             else SingleRunner(aut, drv, mon))
 
@@ -621,7 +621,7 @@ class Or(AcceptanceChecker):
 class AllsatRunner(SingleRunner):
     def __init__(self, aut, drv, mon=False) -> None:
         super().__init__(aut, drv, mon)
-        self.trel: list[list[tuple[float, tuple[Model, str, int]]]] = [list() for _ in range(aut.states + 1)]  # noqa: E501
+        self.trel: dict[int, list[tuple[float, tuple[Model, str, int]]]] = {}
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
         self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
 
@@ -641,7 +641,6 @@ class AllsatRunner(SingleRunner):
         disj_lbls = sympy.false
         for e in edges:
             assert e.label is not None, "Implicit labels are not supported"
-            lbl = to_sympy(e.label, self.symbols)
             if isinstance(e.label, (BooleanFunction, BooleanAtom, sympy.Symbol)):  # noqa: E501
                 lbl = e.label
             else:
@@ -653,7 +652,7 @@ class AllsatRunner(SingleRunner):
                 else:
                     states2models[e.state_conj[0]].add(dict2tuple(m))
         # Add transition for the negation of any labels (if satisfiable)
-        for m in allsat(sympy.Not(disj_lbls)):
+        for m in allsat(~disj_lbls):
             # If any of the transitions had [t], go there
             if true_ones:
                 for s in true_ones:
@@ -728,6 +727,13 @@ class AllsatRunner(SingleRunner):
             for action in self.deadlock_actions:
                 action.run(self)
             return []
+        if len(self.trel[self.state]) == 1 and self.trel[self.state][0][1][0] == ():
+            self.transition_hooks.append(
+                Hook(Bound(self.count+1), Quit("Reached a sink state")))
+        elif all(ns == self.state for _, (_, _, ns) in self.trel[self.state]):
+            self.transition_hooks.append(
+                Hook(Bound(self.count+1), Quit("Reached a sink state")))
+
         m, m_str, next_state = pick(self.trel[self.state])
         old_state, self.state = self.state, next_state
         self.count += 1
@@ -750,6 +756,6 @@ class OnTheFlyAllsatRunner(AllsatRunner):
     def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
         if TYPE_CHECKING:
             assert self.state is not None
-        if not self.trel[self.state]:
+        if self.state not in self.trel:
             self.compute_models(self.state, self.pr)
         return super().step()
