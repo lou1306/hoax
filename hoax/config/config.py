@@ -1,6 +1,7 @@
 # import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Sequence
 
 import msgspec
 import tomli
@@ -49,7 +50,7 @@ class Configuration(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def factory(fname: Path, a: list[Automaton], monitor: bool = False) -> "Configuration":  # noqa: E501
+    def factory(fname: Path, a: Sequence[Automaton], monitor: bool = False) -> "Configuration":  # noqa: E501
         """Load a configuration file from `fname`.
 
         Args:
@@ -109,7 +110,7 @@ class DefaultConfig(Configuration):
     def seed(self, value: int):
         pass
 
-    def __init__(self, a: list[Automaton], mon: bool = False) -> None:
+    def __init__(self, a: Sequence[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
         self.driver = UserDriver(list(aps))
         self.runner = Runner.factory(a=a, drv=self.driver, mon=mon)
@@ -143,7 +144,7 @@ class TomlConfigV1(Configuration):
     def seed(self, value: int):
         self._seed = value
 
-    def __init__(self, fname: Path, conf: TomlV1, a: list[Automaton],
+    def __init__(self, fname: Path, conf: TomlV1, a: Sequence[Automaton],
                  monitor: bool = False) -> None:
         for log_conf in conf.log:
             logger.addHandler(log_conf.get_handler())

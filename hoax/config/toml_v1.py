@@ -43,7 +43,7 @@ class TomlV1(Struct):
         seed: Annotated[int, Meta(ge=0)] = field(name="seed", default=PRG_DEFAULT_SEED)  # noqa: E501
 
         def get_default_driver(self):
-            return self.DRIVERS[self.default_driver]
+            return self.DRIVERS[self.default_driver or "user"]
 
         def __post_init__(self):
             if self.default_driver not in self.DRIVERS:
