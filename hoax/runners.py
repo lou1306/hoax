@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 import sympy  # type: ignore
+from sympy.logic.boolalg import BooleanFunction, BooleanAtom
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
 from networkit.graph import Graph  # type: ignore
@@ -264,6 +265,10 @@ class SingleRunner(Runner):
             self.candidates = [
                 (edge.state_conj[0], fmt_edge(edge, self.aps))
                 for edge in candidates]
+        if sum(1 for _ in self.aut.get_edges(self.state)) == 1 and self.candidates[0][0] == self.state:
+            self.transition_hooks.append(
+                Hook(Bound(self.count+1), Quit("Reached a sink state")))
+
         if len(self.candidates) > 1:
             for action in self.nondet_actions:
                 action.run(self)
@@ -633,6 +638,10 @@ class AllsatRunner(SingleRunner):
         for e in edges:
             assert e.label is not None, "Implicit labels are not supported"
             lbl = to_sympy(e.label, self.symbols)
+            if isinstance(e.label, (BooleanFunction, BooleanAtom, sympy.Symbol)):  # noqa: E501
+                lbl = e.label
+            else:
+                lbl = to_sympy(e.label, self.symbols)
             disj_lbls = sympy.Or(disj_lbls, lbl)
             for m in allsat(lbl):
                 if m == {}:

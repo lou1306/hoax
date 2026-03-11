@@ -1,7 +1,10 @@
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import re
 from sys import intern
-from typing import Any, Collection, Iterable, Optional, Sequence
+from os import PathLike
+from typing import TYPE_CHECKING, Any, Collection, Iterable, Optional, Sequence
 
 import hoa.ast.boolean_expression as ast  # type: ignore
 import hoa.ast.label as ast_label  # type: ignore
@@ -10,6 +13,9 @@ from networkit import Graph
 from hoa.core import HOA, Edge, State  # type: ignore
 from hoa.parsers import HOAParser  # type: ignore
 import sympy  # type: ignore
+from sympy.logic.boolalg import BooleanAtom, BooleanFunction  # type: ignore
+
+from bnet2hoa.main import get_primes, get_worker_fn  # type: ignore
 
 from .util import Model
 
@@ -25,7 +31,10 @@ def fmt_state(s: State) -> str:
 
 
 def fmt_edge(e: Edge, aps: list[str]) -> str:
-    lbl = fmt_expr(e.label, aps)
+    if isinstance(e.label, (BooleanAtom, BooleanFunction, sympy.Symbol)):
+        lbl = e.label
+    else:
+        lbl = fmt_expr(e.label, aps)
     tgt = ' '.join(str(i) for i in e.state_conj)
     return f"{lbl} --> {tgt}"
 
@@ -64,6 +73,7 @@ PartialTransition = tuple[int, Model, str, int]
 class Automaton:
     def __init__(self, aut: HOA, filename: Optional[str] = None, ctrl: Optional[set] = None):  # noqa: E501
         self.hoa = aut
+        self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.get_aps()]  # noqa: E501
         self.ctrl = ctrl or set()
         self.cache: dict[tuple, Any] = {}
         self.candidate_cache: dict[tuple, Edge | None] = {}
@@ -144,8 +154,12 @@ class Automaton:
         Yields:
             Iterable[Edge]: Edges that `valuation` may trigger.
         """
+        subs = {sym: (sym.name in values) for sym in self.symbols}  # noqa: E501
         for edge in self.get_edges(index):
-            if self.evaluate(edge.label, values):
+            if isinstance(edge.label, (BooleanFunction, BooleanAtom, sympy.Symbol)):  # noqa: E501
+                if edge.label.subs(subs) is sympy.true:
+                    yield edge
+            elif self.evaluate(edge.label, values):
                 yield edge
 
     def get_first_candidate(self, index: int, values: set):
@@ -224,3 +238,110 @@ def to_sympy(node, symbols=list[sympy.core.symbol.Symbol]) -> sympy.core.expr.Ex
         case ast.Not(argument=arg):
             return ~to_sympy(arg, symbols)
     raise Exception(f"Unexpected node {node}")
+
+
+class LazyHOA:
+    int_re = re.compile(r"(\d+)")
+
+    def __init__(self, states: int, header: str, states_txts: Sequence[str]):
+        self.int2edges: dict[int, (Sequence[Edge] | None)] = defaultdict(lambda: None)  # noqa: E501
+        self.header = header
+        self.num_states = states
+        self.states = {}
+        for s in states_txts:
+            m = LazyHOA.int_re.search(s)
+            if m is None:
+                raise Exception(f"Unexpected state line {s}")
+            index = int(m.group(1))
+            self.states[index] = s
+
+    def __getitem__(self, index: int) -> Sequence[Edge]:
+        if index >= self.num_states:
+            raise StopIteration
+        if self.int2edges[index] is None:
+            aut = LazyAutomaton._parser(
+                "HOA:v1\n"
+                "Acceptance: 0 t\n"
+                f"--BODY--\nState: {self.states[index]}\n--END--")
+            _, edges = aut.body.state2edges.popitem()
+            self.int2edges[index] = edges
+        result = self.int2edges[index]
+        if TYPE_CHECKING:
+            assert result is not None
+        return result 
+
+    def __iter__(self):
+        for i in range(self.num_states):
+            yield self[i]
+
+
+class LazyBNet:
+    def __init__(self, primes: dict):
+        self.int2edges: dict[int, (Sequence[Edge] | None)] = defaultdict(lambda: None)  # noqa: E501
+        self.aps = list(primes.keys())
+        self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
+        self.worker = get_worker_fn(primes)
+        self.executor = ThreadPoolExecutor(max_workers=16)
+
+    def var_to_symbol(self, i: int) -> str:
+        if i == 0:
+            return sympy.true
+        return self.symbols[i-1] if i > 0 else ~self.symbols[-i-1]
+
+    def dnf_to_sympy(self, dnf: tuple[int]) -> sympy.core.expr.Expr:
+        return sympy.Or(*(
+            sympy.And(*(self.var_to_symbol(i) for i in clause))
+            for clause in dnf))
+
+    def make_edge(self, s: int, dnf: list[list[int]]) -> Edge:
+        lbl = self.dnf_to_sympy(dnf)
+        return Edge(state_conj=(s,), label=lbl, acc_sig=())
+
+    def __getitem__(self, index: int):
+        if self.int2edges[index] is not None:
+            return self.int2edges[index]
+        self.int2edges[index] = []
+        tr = self.worker(index)
+
+        for s, dnf in tr.items():
+            lbl = self.dnf_to_sympy(dnf)
+            edge = Edge(state_conj=(s,), label=lbl, acc_sig=())
+            self.int2edges[index].append(edge)
+
+        result = self.int2edges[index]
+        if TYPE_CHECKING:
+            assert result is not None
+        return result
+
+
+class LazyAutomaton(Automaton):
+    _parser = HOAParser()
+
+    def __init__(self, aut, i2e, filename=None, ctrl=None):
+        super().__init__(aut, filename, ctrl)
+        self.int2edges = i2e
+
+    @staticmethod
+    def from_file(file: PathLike) -> "LazyAutomaton":
+        content = Path(file).read_text()
+        header, body = content.split("--BODY--")
+        header_hoa = LazyAutomaton._parser(header + "--BODY--\n--END--")
+        states_txts = body.split("State: ")[1:]
+        states_txts[-1] = states_txts[-1][:states_txts[-1].rfind("--END--")]
+        states = header_hoa.header.nb_states or len(states_txts)
+        i2e = LazyHOA(states, header, states_txts)
+
+        return LazyAutomaton(header_hoa, i2e, filename=file)
+
+    def from_bnet(file: PathLike) -> "LazyAutomaton":
+        primes = get_primes(file)
+        aps = list(primes.keys())
+        header_hoa = LazyAutomaton._parser(
+            "HOA:v1\n"
+            f"Acceptance: 0 t\n"
+            f"""AP: {len(aps)} {" ".join(f'"{ap}"' for ap in aps)}"""
+            "--BODY--\n--END--")
+        i2e = LazyBNet(primes)
+        aut = LazyAutomaton(header_hoa, i2e, filename=file)
+        aut.states = 2**len(aps)
+        return aut
