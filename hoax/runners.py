@@ -637,7 +637,7 @@ class AllsatRunner(SingleRunner):
     def compute_models(self, state: int, pr: dict[str, float]):
         edges = self.aut.get_edges(state)
         states2models: dict[int, set[Model]] = defaultdict(set)
-        true_ones = []
+        true_ones = set()
 
         def handle_edge(e):
             assert e.label is not None, "Implicit labels are not supported"
@@ -648,7 +648,7 @@ class AllsatRunner(SingleRunner):
             # TODO this will break on no-GIL Pythons!
             for m in allsat(lbl):
                 if m == {}:
-                    true_ones.append(e.state_conj[0])
+                    true_ones.add(e.state_conj[0])
                 else:
                     states2models[e.state_conj[0]].add(dict2tuple(m))
             return lbl
@@ -657,7 +657,7 @@ class AllsatRunner(SingleRunner):
 
         # Add transition for the negation of any labels (if satisfiable)
         for m in allsat(~disj_lbls):
-            # If any of the transitions had [t], go there
+            # If any of the transitions had [t], we may go there
             if true_ones:
                 for s in true_ones:
                     states2models[s].add(dict2tuple(m))
@@ -690,16 +690,16 @@ class AllsatRunner(SingleRunner):
                 states2models[s].add(dict2tuple(m_ext))
 
         models2states: dict[tuple, set] = defaultdict(set)
-        next_states = set(states2models.keys())
-        for s1 in next_states:
-            for m1 in states2models[s1]:
-                models2states[m1].update((s1,))
+        for s1, s1_models in states2models.items():
+            for m1 in s1_models:
+                models2states[m1].add(s1)
 
         cumulative_sum = 0.0
 
         trel: list[tuple[float, tuple[Model, str, int]]] = []
 
-        for s in states2models:
+        # Sorting is needed to have the same trace given the same PRNG seed
+        for s in sorted(states2models.keys()):
             for m in states2models[s]:
                 m_states = models2states[m]
                 p_m = prob(m, pr)
