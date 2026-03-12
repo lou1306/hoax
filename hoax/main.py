@@ -1,4 +1,5 @@
 import importlib.metadata
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -68,19 +69,16 @@ def hoax(
 
     t = datetime.now()
     run = conf.runner
-    
     run.init()
     logger.info(f"Init done in {datetime.now() - t} s")
+
     t = datetime.now()
+    out_stream = open(os.devnull, 'w') if quiet else sys.stdout
     try:
-        if quiet:
-            while True:
-                run.step()
-        else:
-            while True:
-                tr = run.step()
-                for i, (old_state, _, lbl, new_state) in enumerate(tr):
-                    sys.stdout.write(f"{i}: {old_state} -- {lbl} --> {new_state}\n")  # noqa: E501
+        while True:
+            tr = run.step()
+            for i, (old_state, _, lbl, new_state) in enumerate(tr):
+                out_stream.write(f"{i}: {old_state} -- {lbl} --> {new_state}\n")  # noqa: E501
     except (StopRunner, KeyboardInterrupt, EndOfFiniteTrace) as e:
         logger.warning(f"Stopping due to {repr(e)}")
     end = datetime.now()
