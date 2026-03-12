@@ -1,5 +1,4 @@
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
 from sys import intern
@@ -282,8 +281,7 @@ class LazyBNet:
         self.int2edges: dict[int, (Sequence[Edge] | None)] = defaultdict(lambda: None)  # noqa: E501
         self.aps = list(primes.keys())
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
-        self.worker = get_worker_fn(primes)
-        self.executor = ThreadPoolExecutor(max_workers=16)
+        self.worker = get_worker_fn(primes, allow_stuttering=True)
 
     def var_to_symbol(self, i: int) -> str:
         if i == 0:
@@ -302,13 +300,8 @@ class LazyBNet:
     def __getitem__(self, index: int):
         if self.int2edges[index] is not None:
             return self.int2edges[index]
-        self.int2edges[index] = []
         tr = self.worker(index)
-
-        for s, dnf in tr.items():
-            lbl = self.dnf_to_sympy(dnf)
-            edge = Edge(state_conj=(s,), label=lbl, acc_sig=())
-            self.int2edges[index].append(edge)
+        self.int2edges[index] = [self.make_edge(k, v) for k, v in tr.items()]
 
         result = self.int2edges[index]
         if TYPE_CHECKING:
