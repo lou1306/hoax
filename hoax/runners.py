@@ -624,6 +624,7 @@ class AllsatRunner(SingleRunner):
         self.trel: dict[int, list[tuple[float, tuple[Model, str, int]]]] = {}
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
         self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
+        self.executor = ThreadPoolExecutor()
 
     def get_weights(self) -> dict[str, float]:
         pr = {}
@@ -638,19 +639,22 @@ class AllsatRunner(SingleRunner):
         states2models: dict[int, set[Model]] = defaultdict(set)
         true_ones = []
 
-        disj_lbls = sympy.false
-        for e in edges:
+        def handle_edge(e):
             assert e.label is not None, "Implicit labels are not supported"
             if isinstance(e.label, (BooleanFunction, BooleanAtom, sympy.Symbol)):  # noqa: E501
                 lbl = e.label
             else:
                 lbl = to_sympy(e.label, self.symbols)
-            disj_lbls = sympy.Or(disj_lbls, lbl)
+            # TODO this will break on no-GIL Pythons!
             for m in allsat(lbl):
                 if m == {}:
                     true_ones.append(e.state_conj[0])
                 else:
                     states2models[e.state_conj[0]].add(dict2tuple(m))
+            return lbl
+
+        disj_lbls = sympy.Or(*self.executor.map(handle_edge, edges))
+
         # Add transition for the negation of any labels (if satisfiable)
         for m in allsat(~disj_lbls):
             # If any of the transitions had [t], go there
@@ -716,6 +720,7 @@ class AllsatRunner(SingleRunner):
         # Retrieve AP probabilities
         pr = self.get_weights()
 
+        # We need a different executor to avoid deadlocks
         with ThreadPoolExecutor() as executor:
             f = [executor.submit(lambda x: self.compute_models(x, pr), x) for x in range(self.aut.states + 1)]  # noqa: E501
             wait(f)
