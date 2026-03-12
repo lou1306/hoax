@@ -68,6 +68,7 @@ def hoax(
 
     t = datetime.now()
     run = conf.runner
+    
     run.init()
     logger.info(f"Init done in {datetime.now() - t} s")
     t = datetime.now()
@@ -83,5 +84,5 @@ def hoax(
     except (StopRunner, KeyboardInterrupt, EndOfFiniteTrace) as e:
         logger.warning(f"Stopping due to {repr(e)}")
     end = datetime.now()
-    logger.info(f"{run.count} steps done in {end - t} s")
+    logger.info(f"{run.count-1} steps done in {end - t} s")
     logger.info(f"total: {end - t0} s")

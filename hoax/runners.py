@@ -278,10 +278,10 @@ class SingleRunner(Runner):
                 action.run(self)
         old_state, next_state = self.state, self.candidates[0][0]
 
-        self.count += 1
         self.state = next_state
         for hook in self.transition_hooks:
             hook.run(self)
+        self.count += 1
         return ((old_state, inputs, "[" + " ".join(inputs) + "]", next_state),)
 
 
