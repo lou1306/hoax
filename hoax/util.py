@@ -1,3 +1,4 @@
+from bisect import bisect
 import logging
 import os
 from collections.abc import Sequence
