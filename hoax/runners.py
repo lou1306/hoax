@@ -756,7 +756,6 @@ class OnTheFlyAllsatRunner(AllsatRunner):
 
     def init(self):
         super(AllsatRunner, self).init()
-        self.compute_models(self.state, self.pr)
 
     def step(self, _: Optional[set] = None) -> Iterable[PartialTransition]:
         if TYPE_CHECKING:
