@@ -14,7 +14,7 @@ from hoa.parsers import HOAParser  # type: ignore
 import sympy  # type: ignore
 from sympy.logic.boolalg import BooleanAtom, BooleanFunction  # type: ignore
 
-from bnet2hoa.main import get_primes, get_worker_fn  # type: ignore
+from bnet2hoa.main import get_primes, get_worker_fn, primes_setup  # type: ignore
 
 from .util import Model
 
@@ -277,11 +277,19 @@ class LazyHOA:
 
 
 class LazyBNet:
-    def __init__(self, primes: dict):
+    def __init__(self, fname: PathLike):
         self.int2edges: dict[int, (Sequence[Edge] | None)] = defaultdict(lambda: None)  # noqa: E501
+        primes = get_primes(fname)
+        self.aps = list(primes.keys())
+        self.header_hoa = LazyAutomaton._parser(
+            "HOA:v1\n"
+            f"Acceptance: 0 t\n"
+            f"""AP: {len(aps)} {" ".join(f'"{ap}"' for ap in aps)}"""
+            "--BODY--\n--END--")
+
         self.aps = list(primes.keys())
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
-        self.worker = get_worker_fn(primes, allow_stuttering=True)
+        self.worker = get_worker_fn(primes_setup(primes), allow_stuttering=True)  # noqa: E501
 
     def var_to_symbol(self, i: int) -> str:
         if i == 0:
@@ -329,14 +337,7 @@ class LazyAutomaton(Automaton):
         return LazyAutomaton(header_hoa, i2e, filename=file)
 
     def from_bnet(file: PathLike) -> "LazyAutomaton":
-        primes = get_primes(file)
-        aps = list(primes.keys())
-        header_hoa = LazyAutomaton._parser(
-            "HOA:v1\n"
-            f"Acceptance: 0 t\n"
-            f"""AP: {len(aps)} {" ".join(f'"{ap}"' for ap in aps)}"""
-            "--BODY--\n--END--")
-        i2e = LazyBNet(primes)
-        aut = LazyAutomaton(header_hoa, i2e, filename=file)
-        aut.states = 2**len(aps)
+        i2e = LazyBNet(file)
+        aut = LazyAutomaton(i2e.header_hoa, i2e, filename=file)
+        aut.states = 2**len(i2e.aps)
         return aut
