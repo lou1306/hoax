@@ -124,7 +124,7 @@ class Automaton:
     def get_initial_states(self):
         yield from self.hoa.header.start_states
 
-    def get_edges(self, index: int) -> Sequence[Edge]:
+    def get_edges(self, index: int):
         """Yield all the edges from state `index`."""
         yield from self.int2edges[index]
 
@@ -269,7 +269,7 @@ class LazyHOA:
         result = self.int2edges[index]
         if TYPE_CHECKING:
             assert result is not None
-        return result 
+        return result
 
     def __iter__(self):
         for i in range(self.num_states):
@@ -284,7 +284,7 @@ class LazyBNet:
         self.header_hoa = LazyAutomaton._parser(
             "HOA:v1\n"
             f"Acceptance: 0 t\n"
-            f"""AP: {len(aps)} {" ".join(f'"{ap}"' for ap in aps)}"""
+            f"""AP: {len(self.aps)} {" ".join(f'"{ap}"' for ap in self.aps)}"""
             "--BODY--\n--END--")
 
         self.aps = list(primes.keys())
