@@ -21,6 +21,9 @@ from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
 from .util import (PRG_BOUNDED, Model, allsat, dict2tuple, pick, prob,
                    tuple2dict)
 
+# Need this to avoid circular imports
+import hoax.config.config as config
+
 
 class Action(ABC):
     @abstractmethod
@@ -71,23 +74,23 @@ class Runner(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def factory(a: Sequence[Automaton], drv: Driver, mon: bool = False) -> "Runner":  # noqa: E501
-        if len(a) > 1:
-            return CompositeRunner(a, drv, mon)
-        aut = a[0]
+    def factory(conf: config.Configuration, automata: Sequence[Automaton]) -> "Runner":  # noqa: E501
+        if len(automata) > 1:
+            return CompositeRunner(conf, automata)
+        aut = automata[0]
         prp = aut.hoa.header.properties or []
         if all(x in prp for x in ("complete", "deterministic")):
-            return DetCompleteSingleRunner(aut, drv, mon)
+            return DetCompleteSingleRunner(conf, aut)
         return (
-            OnTheFlyAllsatRunner(aut, drv, mon)
-            if all(type(d) is RandomDriver for d in drv.get_drivers())
-            else SingleRunner(aut, drv, mon))
+            SingleRunner(conf, aut)
+            if all(type(d) is RandomDriver for d in conf.driver.get_drivers())
+            else SingleRunner(conf, aut))
 
 
-def spawn_runner(pipe: Connection):  # type: ignore
-    fname, monitor = pipe.recv(), pipe.recv()
+def spawn_runner(pipe: Connection, conf: config.Configuration):
+    fname = pipe.recv()
     aut = parse(fname)
-    runner = SingleRunner(aut, UserDriver([]), monitor)
+    runner = SingleRunner(conf, aut)
     while True:
         data = pipe.recv_bytes()
         msg = msgpack.loads(data)
@@ -115,17 +118,17 @@ class MPCompositeRunner(Runner):
     QUIT_MSG = msgpack.dumps("QUIT")
     GET_COUNT_MSG = msgpack.dumps("GET_COUNT")
 
-    def __init__(self, automata: Sequence[Automaton], drv: Driver,
-                 monitor: bool = False) -> None:
-        self.driver = drv
+    def __init__(self,
+                 conf: config.Configuration,
+                 automata: Sequence[Automaton]) -> None:
+        self.driver = conf.driver
         self.runners: list[Runner] = []
         self.procs = []
         for a in automata:
             parent_pipe, child_pipe = Pipe()
-            proc = Process(target=spawn_runner, args=(child_pipe,))
+            proc = Process(target=spawn_runner, args=(child_pipe, conf))
             self.procs.append((proc, parent_pipe))
             parent_pipe.send(a.filename)
-            parent_pipe.send(monitor)
             proc.start()
 
     def __del__(self):
@@ -169,12 +172,11 @@ class MPCompositeRunner(Runner):
 
 class CompositeRunner(Runner):
     """Runner for multiple automata, fed by the same driver."""
-    def __init__(self, automata: Sequence[Automaton], drv: Driver,
-                 monitor: bool = False) -> None:
-        self.driver = drv
+    def __init__(self, conf: config.Configuration) -> None:
+        self.driver = conf.driver
         self.runners: list[Runner] = []
-        for a in automata:
-            self.runners.append(Runner.factory((a,), drv, monitor))
+        for a in conf.automata:
+            self.runners.append(Runner.factory(conf, a))
 
     @property
     def count(self):
@@ -203,10 +205,10 @@ class CompositeRunner(Runner):
 
 class SingleRunner(Runner):
     """Runner for a single automaton."""
-    def __init__(self, aut: Automaton, drv: Driver, mon: bool = False) -> None:
+    def __init__(self, conf: config.Configuration, aut: Automaton) -> None:
         self.aut = aut
         self.aps = list(aut.get_aps())
-        self.driver = drv
+        self.driver = conf.driver
         self.state: int | None = None
         self.count = 0
         # self.trace = []
@@ -216,8 +218,7 @@ class SingleRunner(Runner):
         self.candidates: list[tuple[int, str]] = []
         prp = self.aut.hoa.header.properties or []
         self.deterministic = "deterministic" in prp
-        # TODO make this configurable
-        if mon:
+        if conf.monitor:
             chk = AcceptanceChecker.make_checker(self.aut)
             self.transition_hooks.append(Hook(chk, Reset()))
 
@@ -619,8 +620,8 @@ class Or(AcceptanceChecker):
 
 
 class AllsatRunner(SingleRunner):
-    def __init__(self, aut, drv, mon=False) -> None:
-        super().__init__(aut, drv, mon)
+    def __init__(self, conf: config.Configuration, aut: Automaton) -> None:
+        super().__init__(conf, aut)
         self.trel: dict[int, list[tuple[float, tuple[Model, str, int]]]] = {}
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
         self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
@@ -750,8 +751,8 @@ class AllsatRunner(SingleRunner):
 class OnTheFlyAllsatRunner(AllsatRunner):
     """An `AllsatRunner` that computes the transition relation on the fly."""
 
-    def __init__(self, aut, drv, mon=False) -> None:
-        super().__init__(aut, drv, mon)
+    def __init__(self, conf, aut) -> None:
+        super().__init__(conf, aut)
         self.pr = self.get_weights()
 
     def init(self):

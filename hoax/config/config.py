@@ -49,6 +49,16 @@ class Configuration(ABC):
     def seed(self, value: int):
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def monitor() -> bool:
+        raise NotImplementedError
+
+    @monitor.setter
+    @abstractmethod
+    def monitor(value: bool):
+        raise NotImplementedError
+
     @staticmethod
     def factory(fname: Path, a: Sequence[Automaton], monitor: bool = False) -> "Configuration":  # noqa: E501
         """Load a configuration file from `fname`.
@@ -110,10 +120,18 @@ class DefaultConfig(Configuration):
     def seed(self, value: int):
         pass
 
+    @property
+    def monitor(self) -> bool:
+        return False
+
+    @monitor.setter
+    def monitor(self, value: bool):
+        pass
+
     def __init__(self, a: Sequence[Automaton], mon: bool = False) -> None:
         aps = list(set(ap for aut in a for ap in aut.get_aps()))
         self.driver = UserDriver(list(aps))
-        self.runner = Runner.factory(a=a, drv=self.driver, mon=mon)
+        self.runner = Runner.factory(self, a)
         self.runner.add_nondet_action(UserChoice())
 
 
@@ -144,31 +162,40 @@ class TomlConfigV1(Configuration):
     def seed(self, value: int):
         self._seed = value
 
-    def __init__(self, fname: Path, conf: TomlV1, a: Sequence[Automaton],
+    @property
+    def monitor(self) -> bool:
+        return self._monitor
+
+    @monitor.setter
+    def monitor(self, value: bool):
+        self._monitor = value
+
+    def __init__(self, fname: Path, toml: TomlV1, a: Sequence[Automaton],
                  monitor: bool = False) -> None:
-        for log_conf in conf.log:
+        for log_conf in toml.log:
             logger.addHandler(log_conf.get_handler())
         self.fname = fname
-        self.seed = conf.hoax.seed
+        self.seed = toml.hoax.seed
+        self.monitor = monitor
 
         aps = list(ap for aut in a for ap in aut.get_aps())
         d = CompositeDriver()
-        for drv_conf in conf.drivers():
+        for drv_conf in toml.drivers():
             base_dir = Path(self.fname).parent
             drv = drv_conf.get_driver(aps, base_dir)
             d.append(drv)
 
         aps_left = [ap for ap in aps if ap not in set(d.aps)]
         if aps_left:
-            default_driver = conf.hoax.get_default_driver()
+            default_driver = toml.hoax.get_default_driver()
             d.append(default_driver(aps_left))
         self.driver = d if len(d.drivers) > 1 else d.drivers[0]
-        self.runner = Runner.factory(a, d, monitor)
-        nondet_action = conf.runner.get_nondet()
+        self.runner = Runner.factory(self, a)
+        nondet_action = toml.runner.get_nondet()
         if nondet_action is not None:
             self.runner.add_nondet_action(nondet_action)
-        if conf.runner.bound > 0:
-            bound_cond = Bound(conf.runner.bound)
+        if toml.runner.bound > 0:
+            bound_cond = Bound(toml.runner.bound)
             self.runner.add_transition_hook(
                 Hook(bound_cond, Quit(cause=bound_cond)))
 
