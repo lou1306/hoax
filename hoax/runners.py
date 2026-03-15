@@ -5,6 +5,7 @@ from enum import Enum
 from itertools import chain, product
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
+import os
 from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
 import msgpack  # type: ignore
@@ -82,8 +83,9 @@ class Runner(ABC):
         if all(x in prp for x in ("complete", "deterministic")):
             return DetCompleteSingleRunner(conf, aut)
         return (
-            SingleRunner(conf, aut)
+            OnTheFlyAllsatRunner(conf, aut)
             if all(type(d) is RandomDriver for d in conf.driver.get_drivers())
+            and not os.environ.get("HOAX_NO_ALLSAT", False)
             else SingleRunner(conf, aut))
 
 
