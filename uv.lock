@@ -38,7 +38,7 @@ wheels = [
 [[package]]
 name = "bnet2hoa"
 version = "0.3.1"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/lou1306/bnet2hoa.git?branch=master#f86c735dddebc27cd1b2e4d2cc3c781d8360f2b9" }
 dependencies = [
     { name = "cython" },
     { name = "lark" },
