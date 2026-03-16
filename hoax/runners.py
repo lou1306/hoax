@@ -216,6 +216,7 @@ class SingleRunner(Runner):
         self.deadlock_actions: list[Action] = []
         self.nondet_actions: list[Action] = []
         self.transition_hooks: list[Hook] = []
+        self.tmp_hooks: list[Hook] = []
         self.candidates: list[tuple[int, str]] = []
         prp = self.aut.hoa.header.properties or []
         self.deterministic = "deterministic" in prp
@@ -235,6 +236,8 @@ class SingleRunner(Runner):
         # TODO support initial state conjunction (alternating automata)
         # TODO support user choice for the initial state
         self.count = 0
+        for x in self.tmp_hooks:
+            self.transition_hooks.remove(x)
         start_states = tuple(next(iter(x)) for x in self.aut.hoa.header.start_states or ())  # noqa: E501
         if start_states == ():
             self.state = PRG_BOUNDED(self.aut.states)
@@ -273,8 +276,9 @@ class SingleRunner(Runner):
                 (edge.state_conj[0], fmt_edge(edge, self.aps))
                 for edge in candidates]
         if sum(1 for _ in self.aut.get_edges(self.state)) == 1 and self.candidates[0][0] == self.state:
-            self.transition_hooks.append(
-                Hook(Bound(self.count+1), Quit("Reached a sink state")))
+            sink_hoop = Hook(Bound(self.count+1), Quit("Reached a sink state"))
+            self.transition_hooks.append(sink_hoop)
+            self.tmp_hooks.append(sink_hoop)
 
         if len(self.candidates) > 1:
             for action in self.nondet_actions:
@@ -736,11 +740,13 @@ class AllsatRunner(SingleRunner):
                 action.run(self)
             return []
         if len(self.trel[self.state]) == 1 and self.trel[self.state][0][1][0] == ():
-            self.transition_hooks.append(
-                Hook(Bound(self.count+1), Quit("Reached a sink state")))
+            sink_hoop = Hook(Bound(self.count+1), Quit("Reached a sink state"))
+            self.transition_hooks.append(sink_hoop)
+            self.tmp_hooks.append(sink_hoop)
         elif all(ns == self.state for _, (_, _, ns) in self.trel[self.state]):
-            self.transition_hooks.append(
-                Hook(Bound(self.count+1), Quit("Reached a sink state")))
+            sink_hoop = Hook(Bound(self.count+1), Quit("Reached a sink state"))
+            self.transition_hooks.append(sink_hoop)
+            self.tmp_hooks.append(sink_hoop)
 
         m, m_str, next_state = pick(self.trel[self.state])
         old_state, self.state = self.state, next_state
