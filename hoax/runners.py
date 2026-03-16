@@ -213,7 +213,6 @@ class SingleRunner(Runner):
         self.driver = conf.driver
         self.state: int | None = None
         self.count = 0
-        # self.trace = []
         self.deadlock_actions: list[Action] = []
         self.nondet_actions: list[Action] = []
         self.transition_hooks: list[Hook] = []
@@ -235,6 +234,7 @@ class SingleRunner(Runner):
     def init(self) -> None:
         # TODO support initial state conjunction (alternating automata)
         # TODO support user choice for the initial state
+        self.count = 0
         start_states = tuple(next(iter(x)) for x in self.aut.hoa.header.start_states or ())  # noqa: E501
         if start_states == ():
             self.state = PRG_BOUNDED(self.aut.states)
