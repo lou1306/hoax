@@ -237,7 +237,11 @@ class SingleRunner(Runner):
         # TODO support user choice for the initial state
         self.count = 0
         for x in self.tmp_hooks:
-            self.transition_hooks.remove(x)
+            try:
+                self.transition_hooks.remove(x)
+                self.tmp_hooks.remove(x)
+            except ValueError:
+                continue
         start_states = tuple(next(iter(x)) for x in self.aut.hoa.header.start_states or ())  # noqa: E501
         if start_states == ():
             self.state = PRG_BOUNDED(self.aut.states)
