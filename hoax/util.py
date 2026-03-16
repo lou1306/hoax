@@ -3,6 +3,7 @@ import logging
 import os
 from collections.abc import Sequence
 from itertools import chain, combinations
+import sys
 from typing import TYPE_CHECKING, TypeVar
 
 import fastrand  # type: ignore
@@ -35,12 +36,14 @@ logging.root.handlers.clear()
 logger = logging.getLogger("hoax")
 
 PRG_DEFAULT_SEED = int.from_bytes(os.urandom(4))
+PRG_B = fastrand.xorshift128plusbounded if fastrand.SIXTYFOUR else fastrand.pcg32bounded  # noqa: E501
+PRG_UNIFORM = fastrand.xorshift128plus_uniform if fastrand.SIXTYFOUR else fastrand.pcg32_uniform  # noqa: E501
 
-PRG_BOUNDED = fastrand.pcg32bounded
-PRG_UNIFORM = fastrand.pcg32_uniform
-if fastrand.SIXTYFOUR:
-    PRG_BOUNDED = fastrand.xorshift128plusbounded
-    PRG_UNIFORM = fastrand.xorshift128plus_uniform
+
+def PRG_BOUNDED(n: int) -> int:
+    if n > sys.maxsize:
+        return randint(0, n - 1)
+    return PRG_B(n)
 
 
 def PRG_SEED(seed: int) -> None:
