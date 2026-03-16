@@ -8,6 +8,7 @@ from multiprocessing.connection import Connection
 import os
 from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
+import cachebox
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 import sympy  # type: ignore
@@ -766,6 +767,7 @@ class OnTheFlyAllsatRunner(AllsatRunner):
     def __init__(self, conf, aut) -> None:
         super().__init__(conf, aut)
         self.pr = self.get_weights()
+        self.trel = cachebox.LRUCache(maxsize=min(self.aut.states, int(1e6)))
 
     def init(self):
         super(AllsatRunner, self).init()
