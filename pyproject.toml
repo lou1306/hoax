@@ -24,14 +24,13 @@ hoax = "hoax.main:app"
 
 [dependency-groups]
 dev = [
+    "isort>=7.0.0",
     "mypy>=1.16.0",
     "pytest~=5.2",
 ]
 
 [tool.uv]
-
-[tool.uv.sources]
-networkit = { git = "https://github.com/networkit/networkit", rev = "f28fb2c" }
+add-bounds = "major"
 
 [build-system]
 requires = ["hatchling"]
