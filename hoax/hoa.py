@@ -103,6 +103,7 @@ class Automaton:
         try:
             return self.cache[key]
         except KeyError:
+            assert self.graph_node2scc is not None
             k_id, k_nodes = self.graph_node2scc[index]
             is_minimal = self.cond.degree(k_id) == 0
             result = set(k_nodes)

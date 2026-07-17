@@ -8,8 +8,8 @@ import tomli
 
 from ..drivers import CompositeDriver, Driver, UserDriver
 from ..hoa import Automaton
-from ..runners import (Bound, Hook,
-                       Quit, Runner, UserChoice)
+from ..hooks import Bound, Hook, Quit, UserChoice
+from ..runners import Runner
 from ..util import PRG_DEFAULT_SEED, logger
 from .toml_v1 import TomlV1
 

@@ -1,3 +1,4 @@
+import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -5,48 +6,27 @@ from enum import Enum
 from itertools import chain, product
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
-import os
 from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
-import cachebox
+import cachebox  # type: ignore
 import msgpack  # type: ignore
 import networkit as nk  # type: ignore
 import sympy  # type: ignore
-from sympy.logic.boolalg import BooleanFunction, BooleanAtom
 from hoa.ast.acceptance import AcceptanceAtom, AtomType  # type: ignore
 from hoa.ast.boolean_expression import PositiveAnd, PositiveOr  # type: ignore
 from networkit.graph import Graph  # type: ignore
-
-from .drivers import Driver, RandomDriver, UserDriver
-from .hoa import (Automaton, PartialTransition, Transition, fmt_edge,
-                  fmt_state, parse, to_sympy)
-from .util import (PRG_BOUNDED, Model, allsat, dict2tuple, pick, prob,
-                   tuple2dict)
+from sympy.logic.boolalg import BooleanAtom, BooleanFunction  # type: ignore
 
 # Need this to avoid circular imports
-import hoax.config.config as config
+if TYPE_CHECKING:
+    from .config.config import Configuration
 
-
-class Action(ABC):
-    @abstractmethod
-    def run(self, runner: "SingleRunner") -> None:
-        raise NotImplementedError
-
-    def __str__(self) -> str:
-        return type(self).__name__
-
-
-class Condition(ABC):
-    @abstractmethod
-    def check(self, runner: "SingleRunner"):
-        pass
-
-    def __repr__(self) -> str:
-        return f"{self} (at {hex(id(self))})"
-
-
-class StopRunner(Exception):
-    pass
+from .drivers import RandomDriver
+from .hoa import (Automaton, PartialTransition, Transition, fmt_edge, parse,
+                  to_sympy)
+from .hooks import Action, Bound, Condition, Hook, Quit, Reset
+from .util import (PRG_BOUNDED, Model, allsat, dict2tuple, pick, prob,
+                   tuple2dict)
 
 
 class Runner(ABC):
@@ -76,7 +56,7 @@ class Runner(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def factory(conf: config.Configuration, automata: Sequence[Automaton]) -> "Runner":  # noqa: E501
+    def factory(conf: Configuration, automata: Sequence[Automaton]) -> "Runner":  # noqa: E501
         if len(automata) > 1:
             return CompositeRunner(conf, automata)
         aut = automata[0]
@@ -90,7 +70,7 @@ class Runner(ABC):
             else SingleRunner(conf, aut))
 
 
-def spawn_runner(pipe: Connection, conf: config.Configuration):
+def spawn_runner(pipe: Connection, conf: Configuration):
     fname = pipe.recv()
     aut = parse(fname)
     runner = SingleRunner(conf, aut)
@@ -122,7 +102,7 @@ class MPCompositeRunner(Runner):
     GET_COUNT_MSG = msgpack.dumps("GET_COUNT")
 
     def __init__(self,
-                 conf: config.Configuration,
+                 conf: Configuration,
                  automata: Sequence[Automaton]) -> None:
         self.driver = conf.driver
         self.runners: list[Runner] = []
@@ -175,11 +155,9 @@ class MPCompositeRunner(Runner):
 
 class CompositeRunner(Runner):
     """Runner for multiple automata, fed by the same driver."""
-    def __init__(self, conf: config.Configuration) -> None:
+    def __init__(self, conf: Configuration, automata: Sequence[Automaton]) -> None:  # noqa: E501
         self.driver = conf.driver
-        self.runners: list[Runner] = []
-        for a in conf.automata:
-            self.runners.append(Runner.factory(conf, a))
+        self.runners = [Runner.factory(conf, [a]) for a in automata]
 
     @property
     def count(self):
@@ -208,7 +186,7 @@ class CompositeRunner(Runner):
 
 class SingleRunner(Runner):
     """Runner for a single automaton."""
-    def __init__(self, conf: config.Configuration, aut: Automaton) -> None:
+    def __init__(self, conf: Configuration, aut: Automaton) -> None:
         self.aut = aut
         self.aps = list(aut.get_aps())
         self.driver = conf.driver
@@ -280,7 +258,7 @@ class SingleRunner(Runner):
             self.candidates = [
                 (edge.state_conj[0], fmt_edge(edge, self.aps))
                 for edge in candidates]
-        if sum(1 for _ in self.aut.get_edges(self.state)) == 1 and self.candidates[0][0] == self.state:
+        if sum(1 for _ in self.aut.get_edges(self.state)) == 1 and self.candidates[0][0] == self.state:  # noqa: E501
             sink_hoop = Hook(Bound(self.count+1), Quit("Reached a sink state"))
             self.transition_hooks.append(sink_hoop)
             self.tmp_hooks.append(sink_hoop)
@@ -311,103 +289,6 @@ class DetCompleteSingleRunner(SingleRunner):
         for hook in self.transition_hooks:
             hook.run(self)
         return ((old_state, inputs, "[" + " ".join(inputs) + "]", next_state),)
-
-
-class Reach(Condition):
-    """Condition triggered by reaching a target state."""
-    def __str__(self) -> str:
-        return f"Reach {self.target}"
-
-    def __init__(self, target: int) -> None:
-        self.target = target
-
-    def check(self, runner: SingleRunner):
-        return runner.state == self.target
-
-
-class Bound(Condition):
-    """Condition triggered when an execution reaches a certain length."""
-    def __str__(self) -> str:
-        return f"Bound: {self.bound}"
-
-    def __init__(self, bound) -> None:
-        self.bound = bound
-
-    def check(self, runner: SingleRunner):
-        return runner.count > self.bound
-
-
-class Always(Condition):
-    """Trivial condition, always triggered."""
-    def check(self, _):
-        return True
-
-
-class Hook:
-    """A Hook is a combination of a triggering condition and an action."""
-    def __init__(self, condition: Condition, action: Action) -> None:
-        self.condition = condition
-        self.action = action
-
-    def run(self, runner: SingleRunner):
-        if self.condition.check(runner):
-            msg = f"Hook: {self.condition} triggered {self.action} at step {runner.count}"  # noqa: E501
-            print(msg)
-            self.action.run(runner)
-
-
-class Reset(Action):
-    """Reset the runner to its initial state."""
-    def run(self, runner: SingleRunner) -> None:
-        runner.init()
-
-
-class Log(Action):
-    """Write a message to standard output."""
-    def __init__(self, msg: str) -> None:
-        self.msg = msg
-
-    def __str__(self) -> str:
-        return f"Log {self.msg}"
-
-    def run(self, runner: SingleRunner) -> None:
-        print(f"{self.msg} at {fmt_state(runner.state)}")
-
-
-class PressEnter(Action):
-    """Ask for user confirmation before proceeding."""
-    def run(self, _) -> None:
-        input("Press [Enter] to continue...")
-
-
-class RandomChoice(Action):
-    """Randomly choose a candidate."""
-    def run(self, runner: SingleRunner) -> None:
-        idx = PRG_BOUNDED(len(runner.candidates))
-        runner.candidates[0], runner.candidates[idx] = runner.candidates[idx], runner.candidates[0]  # noqa: E501
-
-
-class UserChoice(Action):
-    """Let the user choose a candidate."""
-    def run(self, runner: SingleRunner) -> None:
-        for i, candidate in enumerate(runner.candidates):
-            print(f"[{i}]\t{candidate}")
-            # print(f"[{i}]\t{fmt_edge(edge, runner.aps)}")
-        choice_int = -1
-        while not 0 <= choice_int < len(runner.candidates):
-            choice = input("Choose a transition from above: ")
-            choice_int = int(choice) if choice.isdecimal() else -1
-        runner.candidates[0], runner.candidates[choice_int] = runner.candidates[choice_int], runner.candidates[0]  # noqa: E501
-
-
-class Quit(Action):
-    """Terminate the runner (and HOAX)."""
-    def __init__(self, cause=None):
-        super().__init__()
-        self.cause = cause
-
-    def run(self, runner):
-        raise StopRunner(self.cause)
 
 
 class PrefixType(Enum):
@@ -448,6 +329,9 @@ class AcceptanceChecker(Condition):
         aut.init_monitor_structures()
 
         def get_uglies(accept: set[int]):
+            assert aut.graph_node2scc is not None
+            assert aut.graph is not None
+
             result = set()
             for k_id in aut.cond.iterNodes():
                 if aut.cond.degree(k_id) > 0:
@@ -631,7 +515,7 @@ class Or(AcceptanceChecker):
 
 
 class AllsatRunner(SingleRunner):
-    def __init__(self, conf: config.Configuration, aut: Automaton) -> None:
+    def __init__(self, conf: Configuration, aut: Automaton) -> None:
         super().__init__(conf, aut)
         self.trel: dict[int, list[tuple[float, tuple[Model, str, int]]]] = {}
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
@@ -767,7 +651,7 @@ class AllsatRunner(SingleRunner):
             for action in self.deadlock_actions:
                 action.run(self)
             return []
-        if len(self.trel[self.state]) == 1 and self.trel[self.state][0][1][0] == ():
+        if len(self.trel[self.state]) == 1 and self.trel[self.state][0][1][0] == ():  # noqa: E501
             sink_hoop = Hook(Bound(self.count+1), Quit("Reached a sink state"))
             self.transition_hooks.append(sink_hoop)
             self.tmp_hooks.append(sink_hoop)

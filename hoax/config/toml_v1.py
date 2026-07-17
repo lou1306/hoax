@@ -1,13 +1,14 @@
-from itertools import chain, combinations
 import logging
-from pathlib import Path
 import sys
+from itertools import chain, combinations
+from pathlib import Path
 from typing import Annotated, Collection, Optional
 
 from msgspec import Meta, Struct, field
 
+from .. import drivers
 from ..hoa import extract_aps
-from .. import drivers, runners
+from ..hooks import Action, RandomChoice, UserChoice
 from ..util import PRG_DEFAULT_SEED
 
 
@@ -117,13 +118,13 @@ class TomlV1(Struct):
     class RunnerSection(Struct):
         NONDET_VALUES = {
             "first": None,
-            "random": runners.RandomChoice(),
-            "user": runners.UserChoice()}
+            "random": RandomChoice(),
+            "user": UserChoice()}
 
         bound: Annotated[int, Meta(gt=0)] = 0
         nondet: Optional[str] = field(default="first")
 
-        def get_nondet(self) -> runners.Action | None:
+        def get_nondet(self) -> Action | None:
             return self.NONDET_VALUES[self.nondet or "first"]
 
         def __post_init__(self):

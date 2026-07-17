@@ -11,7 +11,7 @@ import typer
 from .config.config import Configuration, DefaultConfig
 from .drivers import EndOfFiniteTrace
 from .hoa import Automaton, LazyAutomaton, parse
-from .runners import StopRunner
+from .hooks import StopRunner
 from .util import PRG_SEED, logger
 
 signal(SIGPIPE, SIG_DFL)
@@ -52,7 +52,7 @@ def hoax(
 
     automata: list[Automaton] = [
         LazyAutomaton.from_bnet(f) if f.suffix == ".bnet" else
-        parse(f) if monitor else LazyAutomaton.from_file(f)
+        parse(str(f)) if monitor else LazyAutomaton.from_file(f)
         for f in files]
     print(f"Lazy parsing done in {datetime.now() - t} s", file=sys.stderr)
 
