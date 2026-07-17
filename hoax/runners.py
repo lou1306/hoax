@@ -665,10 +665,33 @@ class AllsatRunner(SingleRunner):
                     states2models[e.state_conj[0]].add(dict2tuple(m))
             return lbl
 
-        disj_lbls = sympy.Or(*self.executor.map(handle_edge, edges))
+        sympy_labels = list(self.executor.map(handle_edge, edges))
 
-        # Add transition for the negation of any labels (if satisfiable)
-        for m in allsat(~disj_lbls):
+        # Build negation as CNF to avoid sympy.Or(-big_disjunction) hang:
+        # ~Or(e1, e2, ...) = And(~e1, ~e2, ...)
+        neg_clauses: list[sympy.Expr] = []
+        negation_needed = True
+        for lbl in sympy_labels:
+            if lbl is sympy.false:
+                neg_clauses = [sympy.false]
+                negation_needed = False
+                break
+            negate_lbl = ~lbl
+            if negate_lbl is sympy.false:
+                neg_clauses = [sympy.false]
+                negation_needed = False
+                break
+            if isinstance(negate_lbl, sympy.And):
+                neg_clauses.append(sympy.Or(*(~a for a in negate_lbl.args)))
+            else:
+                neg_clauses.append(negate_lbl)
+
+        negation_expr = (
+            sympy.And(*neg_clauses)
+            if negation_needed and neg_clauses
+            else None
+        )
+        for m in (allsat(negation_expr) if negation_expr else []):
             # If any of the transitions had [t], we may go there
             if true_ones:
                 for s in true_ones:
