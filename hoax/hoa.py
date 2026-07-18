@@ -297,7 +297,7 @@ class LazyBNet:
             return sympy.true
         return self.symbols[i-1] if i > 0 else ~self.symbols[-i-1]
 
-    def dnf_to_sympy(self, dnf: tuple[int]) -> sympy.core.expr.Expr:
+    def dnf_to_sympy(self, dnf: Sequence[Sequence[int]]) -> sympy.core.expr.Expr:
         return sympy.Or(*(
             sympy.And(*(self.var_to_symbol(i) for i in clause))
             for clause in dnf))

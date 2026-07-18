@@ -6,6 +6,7 @@ from enum import Enum
 from itertools import chain, product
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
+from collections.abc import MutableMapping
 from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
 import cachebox  # type: ignore
@@ -517,7 +518,7 @@ class Or(AcceptanceChecker):
 class AllsatRunner(SingleRunner):
     def __init__(self, conf: Configuration, aut: Automaton) -> None:
         super().__init__(conf, aut)
-        self.trel: dict[int, list[tuple[float, tuple[Model, str, int]]]] = {}
+        self.trel: MutableMapping[int, list[tuple[float, tuple[Model, str, int]]]] = {}
         self.symbols: list[sympy.Symbol] = [sympy.symbols(ap) for ap in self.aps]  # noqa: E501
         self.symbols_inv = {ap: i for i, ap in enumerate(self.symbols)}
         self.executor = ThreadPoolExecutor()
@@ -674,7 +675,7 @@ class OnTheFlyAllsatRunner(AllsatRunner):
     def __init__(self, conf, aut) -> None:
         super().__init__(conf, aut)
         self.pr = self.get_weights()
-        self.trel = cachebox.LRUCache(maxsize=min(self.aut.states, int(1e6)))
+        self.trel = cachebox.LRUCache(maxsize=min(self.aut.states, int(1e6)))  # type: ignore[assignment]
 
     def init(self):
         super(AllsatRunner, self).init()

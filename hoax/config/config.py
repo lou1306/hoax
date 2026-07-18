@@ -51,12 +51,12 @@ class Configuration(ABC):
 
     @property
     @abstractmethod
-    def monitor() -> bool:
+    def monitor(self) -> bool:
         raise NotImplementedError
 
     @monitor.setter
     @abstractmethod
-    def monitor(value: bool):
+    def monitor(self, value: bool):
         raise NotImplementedError
 
     @staticmethod
