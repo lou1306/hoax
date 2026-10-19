@@ -1,0 +1,52 @@
+// Grammar for the Boolean-network (.bnet) file format.
+//
+// A file is an optional `targets, factors` header followed by one rule per
+// line, `name, expression`.  A line containing only a name is shorthand for
+// an identity update (`name, name`), and an empty right-hand side (`name,`)
+// likewise means that the variable keeps its value.  Expressions use `!`,
+// `&`, `|` and parentheses, with the usual precedence (`!` binds tightest,
+// then `&`, then `|`).
+//
+// The grammar is LALR(1).  The operators are left-recursive so that their
+// associativity comes from the grammar itself rather than from precedence
+// declarations.
+
+start: (_HEADER | rule_fn | rule_empty | bare | _NEWLINE)*
+
+rule_fn: NAME "," expr _NEWLINE
+rule_empty: NAME "," _NEWLINE
+bare: NAME _NEWLINE
+
+?expr: or_expr
+
+?or_expr: and_expr
+        | or_expr "|" and_expr   -> or_
+
+?and_expr: unary
+         | and_expr "&" unary    -> and_
+
+?unary: "!" unary                -> not_
+      | atom
+
+?atom: "(" expr ")"
+     | CONST                     -> const_
+     | NAME                      -> var_
+
+// The header is matched as a whole line, so `targets` and `factors` remain
+// usable as ordinary variable names elsewhere.  The lookahead prevents a
+// rule such as `targets, factors & x` from being mistaken for the header.
+_HEADER: /[ \t]*(?i:targets)[ \t]*,[ \t]*(?i:factors)[ \t]*(?:#[^\n]*)?(?=\r?\n|$)/
+
+// Variable names may contain any character except whitespace, the operators,
+// the rule separator and the comment marker -- the convention used by the
+// other .bnet tooling.
+NAME: /[^\s!&|(),#]+/
+
+// A whole-token 0/1 is a constant; longer names such as `10` remain names.
+CONST.2: "0" | "1"
+
+_NEWLINE: /\r?\n/
+COMMENT: /#[^\n]*/
+
+%ignore COMMENT
+%ignore /[ \t\f\v]+/
