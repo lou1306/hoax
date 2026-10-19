@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from multiprocessing import Process, Pipe
+from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from random import choice
 from typing import Optional, Sequence

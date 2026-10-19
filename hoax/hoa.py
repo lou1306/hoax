@@ -6,10 +6,9 @@ from typing import Any, Collection, Iterable, Optional, Sequence
 import hoa.ast.boolean_expression as ast  # type: ignore
 import hoa.ast.label as ast_label  # type: ignore
 import networkit as nk  # type: ignore
-from networkit import Graph
 from hoa.core import HOA, Edge, State  # type: ignore
 from hoa.parsers import HOAParser  # type: ignore
-
+from networkit import Graph
 
 get_first_candidate = intern("get_first_candidate")
 get_trap_set_of = intern("get_trap_set_of")
