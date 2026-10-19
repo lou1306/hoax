@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from io import TextIOWrapper
 from json import loads
 from random import choices
@@ -12,18 +13,28 @@ class EndOfFiniteTrace(Exception):
 
 
 class Driver(ABC):
-    def __init__(self, aps: list[str]) -> None:
+    def __init__(self, aps: list[str] | None = None) -> None:
+        self.aps = aps if aps is not None else []
         log.debug(f"Instantiating {type(self).__name__} for {aps=}")
-        self.aps = aps
 
     @abstractmethod
     def get(self) -> set:
         raise NotImplementedError
 
+    @abstractmethod
+    def get_drivers(self) -> Iterable["Driver"]:
+        raise NotImplementedError
+
+    def find_driver(self, ap: str) -> "Driver | None":
+        for d in self.get_drivers():
+            if ap in d.aps:
+                return d
+        return None
+
 
 class CompositeDriver(Driver):
     def __init__(self) -> None:
-        self.aps: list[str] = []
+        super().__init__()
         self.drivers: list[Driver] = []
 
     def append(self, driver: Driver):
@@ -38,6 +49,9 @@ class CompositeDriver(Driver):
         for d in self.drivers:
             result |= d.get()
         return result
+
+    def get_drivers(self):
+        yield from self.drivers
 
 
 class UserDriver(Driver):
@@ -62,18 +76,24 @@ class UserDriver(Driver):
                 result.add(ap)
         return result
 
+    def get_drivers(self):
+        yield self
+
 
 class RandomDriver(Driver):
     pop = True, False
 
     def __init__(self, aps) -> None:
-        self.aps = aps
+        super().__init__(aps)
         self.k = len(self.aps)
-        self.cum_weights: tuple[float, int] | None = None
+        self.cum_weights: tuple[float, int] = (0.5, 1)
 
     def get(self) -> set:
         result = choices(self.pop, k=self.k, cum_weights=self.cum_weights)
         return set(ap for ap, value in zip(self.aps, result) if value)
+
+    def get_drivers(self):
+        yield self
 
 
 class StreamDriver(Driver):
@@ -87,6 +107,9 @@ class StreamDriver(Driver):
 
     def read_next(self) -> set:
         raise NotImplementedError
+
+    def get_drivers(self):
+        yield self
 
 
 class JSONDriver(StreamDriver):
