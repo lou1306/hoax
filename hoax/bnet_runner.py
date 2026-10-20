@@ -13,15 +13,19 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
 from .bnet import BNet, parse_bnet_file
 from .drivers import Driver, RandomDriver
-from .runners import Action, Hook, Runner
 from .util import PRG_SEED, PRG_UNIFORM
 
+if TYPE_CHECKING:
+    # Import for type checking only: hoax.runners pulls in networkit and the
+    # HOA machinery, which BnetRunner does not use.
+    from .runners import Action, Hook
 
-class BnetRunner(Runner):
+
+class BnetRunner:
     """A random-walk runner whose transition relation is built on the fly."""
 
     def __init__(self, net: BNet, drv: Driver) -> None:
