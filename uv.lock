@@ -99,7 +99,6 @@ source = { editable = "." }
 dependencies = [
     { name = "fastrand" },
     { name = "hoa-utils-redux" },
-    { name = "lark" },
     { name = "msgpack" },
     { name = "msgspec" },
     { name = "networkit" },
@@ -110,6 +109,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "isort" },
+    { name = "lark" },
     { name = "mypy" },
     { name = "pytest" },
 ]
@@ -118,7 +118,6 @@ dev = [
 requires-dist = [
     { name = "fastrand", specifier = ">=3.0.8" },
     { name = "hoa-utils-redux", specifier = ">=0.2.0" },
-    { name = "lark", specifier = ">=1.3.1" },
     { name = "msgpack", specifier = ">=1.1.0" },
     { name = "msgspec", specifier = ">=0.20.0,<1" },
     { name = "networkit", git = "https://github.com/networkit/networkit?rev=f28fb2c" },
@@ -129,6 +128,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "isort", specifier = ">=7.0.0" },
+    { name = "lark", specifier = ">=1.3.1" },
     { name = "mypy", specifier = ">=1.16.0" },
     { name = "pytest", specifier = "~=5.2" },
 ]

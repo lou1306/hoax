@@ -24,8 +24,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Callable, Optional
 
-from lark import Lark, Transformer, UnexpectedInput, v_args
-
+from ._bnet_parser import Lark_StandAlone, Transformer, UnexpectedInput, v_args
 from .util import Model, prob
 
 # ---------------------------------------------------------------------------
@@ -143,12 +142,12 @@ def compile_expr(e: Expr, index: dict[str, int]) -> CompiledExpr:
 # Parsing
 # ---------------------------------------------------------------------------
 
-_GRAMMAR = Path(__file__).with_name("bnet.lark").read_text(encoding="utf-8")
-
-# Both parsers are LALR(1) and share the same grammar; only the start symbol
-# differs.  Loading the table at import time keeps parsing O(n) per file.
-_FILE_PARSER = Lark(_GRAMMAR, parser="lalr", start="start")
-_EXPR_PARSER = Lark(_GRAMMAR, parser="lalr", start="expr", maybe_placeholders=False)
+# Generated with:
+#   python -m lark.tools.standalone -s start -s expr hoax/bnet.lark \
+#       -o hoax/_bnet_parser.py
+# The standalone parser embeds the LALR tables, so importing hoax.bnet no
+# longer builds the grammar tables at startup.
+_PARSER = Lark_StandAlone()
 
 
 @v_args(inline=True)
@@ -196,7 +195,7 @@ def tokenize(text: str) -> list[str]:
     This is a thin wrapper over the Lark lexer, kept for backwards
     compatibility; the parser itself is entirely grammar-driven.
     """
-    return [tok.value for tok in _FILE_PARSER.lex(text) if tok.type != "_NEWLINE"]
+    return [tok.value for tok in _PARSER.lex(text) if tok.type != "_NEWLINE"]
 
 
 def parse_expr(text: str) -> Expr:
@@ -205,7 +204,7 @@ def parse_expr(text: str) -> Expr:
     if not text:
         raise ValueError("empty expression")
     try:
-        return _TO_AST.transform(_EXPR_PARSER.parse(text))
+        return _TO_AST.transform(_PARSER.parse(text, start="expr"))
     except UnexpectedInput as e:
         raise ValueError(f"invalid expression {text!r}: {e}") from e
 
@@ -496,7 +495,7 @@ def parse_bnet(text: str) -> BNet:
     if not text.endswith("\n"):
         text += "\n"
     try:
-        rules = _TO_AST.transform(_FILE_PARSER.parse(text))
+        rules = _TO_AST.transform(_PARSER.parse(text, start="start"))
     except UnexpectedInput as e:
         raise ValueError(f"invalid .bnet input: {e}") from e
 

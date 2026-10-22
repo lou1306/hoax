@@ -13,7 +13,6 @@ dependencies = [
     "tomli>=2.0.1,<3",
     "networkit",
     "msgpack>=1.1.0",
-    "lark>=1.3.1",
     "fastrand>=3.0.8",
 ]
 
@@ -28,6 +27,7 @@ hoax-bn = "hoax.bnet_runner:main"
 [dependency-groups]
 dev = [
     "isort>=7.0.0",
+    "lark>=1.3.1",
     "mypy>=1.16.0",
     "pytest~=5.2",
 ]
