@@ -568,7 +568,7 @@ def test_runner_stutter_free_trajectory_matches_reference():
     assert walked == reference
 
 
-def test_runner_caches_topology_only():
+def test_runner_caches_potential_changes():
     net = parse_bnet(TINY)
     runner = BnetRunner(net, RandomDriver(list(net.names)))
     runner.init(state=3)
@@ -581,6 +581,44 @@ def test_runner_caches_topology_only():
     runner = BnetRunner(net, RandomDriver(list(net.names)))
     runner.init(state=0)
     assert runner.is_steady(0)
+
+
+def test_runner_incremental_target_matches_reference():
+    """Cache misses must update only the interaction graph's out-neighbours."""
+    net = parse_bnet("""
+targets, factors
+a, !a
+b, a & !b
+c, b | a
+d, 0
+e, e
+""")
+    runner = BnetRunner(net, RandomDriver(list(net.names)))
+    runner.init(state=0)
+
+    # Arbitrary consecutive states exercise multi-bit target updates; the
+    # second lookup checks that cache hits return the same list.
+    for state in all_states(net):
+        changes = runner.potential_changes(state)
+        assert changes == reference_potential_changes(net, state)
+        assert runner.potential_changes(state) is changes
+
+
+@pytest.mark.parametrize("mode", list(SamplingMode))
+def test_runner_target_cache_matches_reference_during_walk(mode):
+    net = parse_bnet(TINY)
+    weights = {"a": 0.2, "b": 0.8} if mode is SamplingMode.ASYNC_WEIGHTED else None
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)), mode=mode, weights=weights)
+
+    PRG_SEED(20261022)
+    runner.init(state=0)
+    for _ in range(100):
+        assert runner.potential_changes(runner.state) == (
+            reference_potential_changes(net, runner.state))
+        runner.step()
+    assert runner.potential_changes(runner.state) == (
+        reference_potential_changes(net, runner.state))
 
 
 def test_runner_trajectory_unchanged():

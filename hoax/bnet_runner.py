@@ -3,8 +3,8 @@
 The runner reuses hoax's drivers, probability primitives and hook machinery,
 but samples the next state straight from the network's update functions
 (:class:`hoax.bnet.BNet`) instead of enumerating the successor distribution.
-It caches only the set of variables that may fire in each visited state, not
-the successor tree itself.
+It caches the update target and the set of variables that may fire in each
+visited state, not the successor tree itself.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Sequence
 
-from .bnet import BNet, parse_bnet_file
+from .bnet import BNet, parse_bnet_file, vars_of
 from .drivers import Driver, RandomDriver
 from .util import PRG_SEED, PRG_UNIFORM, logger
 
@@ -87,7 +87,12 @@ class BnetRunner:
         self._validate_weights()
         self.state: Optional[int] = None
         self._count = 0
-        self._changes: dict[int, list[int]] = {}
+        self._cache: dict[int, tuple[int, list[int]]] = {}
+        self._dependents = self._build_dependents()
+        self._values: list[bool] = []
+        self._values_state: Optional[int] = None
+        self._last_state: Optional[int] = None
+        self._last_target = 0
         self.deadlock_actions: list[Action] = []
         self.nondet_actions: list[Action] = []
         self.transition_hooks: list[Hook] = []
@@ -136,6 +141,50 @@ class BnetRunner:
     def count(self, value: int) -> None:
         self._count = value
 
+    def _build_dependents(self) -> list[list[int]]:
+        """Out-neighbours of each variable in the network's interaction graph."""
+        dependents = [[] for _ in range(self.net.n)]
+        for j, expr in enumerate(self.net.update):
+            for name in vars_of(expr):
+                dependents[self.net.index[name]].append(j)
+        return dependents
+
+    @staticmethod
+    def _changes_from_target(target: int, state: int) -> list[int]:
+        """Variables whose target differs from their current value."""
+        diff = target ^ state
+        changes: list[int] = []
+        while diff:
+            bit = diff & -diff
+            changes.append(bit.bit_length() - 1)
+            diff ^= bit
+        return changes
+
+    def _values_for(self, state: int) -> list[bool]:
+        """Return the variable values of ``state``, rebuilding them if needed."""
+        if self._values_state != state:
+            self._values = [
+                bool((state >> i) & 1) for i in range(self.net.n)]
+            self._values_state = state
+        return self._values
+
+    def _target_of(self, values: list[bool]) -> int:
+        """Evaluate every update function; used only to seed the cache."""
+        target = 0
+        for j, f in enumerate(self.net._compiled_update):
+            if f(values):
+                target |= 1 << j
+        return target
+
+    def _seed_cache(self, state: int) -> tuple[int, list[int]]:
+        """Compute and cache the target and changes for ``state`` from scratch."""
+        target = self._target_of(self._values_for(state))
+        changes = self._changes_from_target(target, state)
+        self._cache[state] = (target, changes)
+        self._last_state = state
+        self._last_target = target
+        return target, changes
+
     def init(self, state: Optional[int] = None) -> None:
         if state is None:
             state = 0
@@ -144,6 +193,14 @@ class BnetRunner:
                     state |= 1 << i
         self.state = state
         self.count = 0
+        self._values = []
+        self._values_state = None
+        hit = self._cache.get(state)
+        if hit is None:
+            self._seed_cache(state)
+        else:
+            self._last_state = state
+            self._last_target = hit[0]
 
     def add_transition_hook(self, hook: Hook) -> None:
         self.transition_hooks.append(hook)
@@ -155,11 +212,52 @@ class BnetRunner:
         self.deadlock_actions.append(action)
 
     def potential_changes(self, state: int) -> list[int]:
-        """Indices of the variables that may fire in ``state``, cached."""
-        changes = self._changes.get(state)
-        if changes is None:
-            changes = self.net.potential_changes(state)
-            self._changes[state] = changes
+        """Indices of the variables that may fire in ``state``, cached.
+
+        Cache hits return the stored change list directly.  On a miss, the
+        target mask is updated only for variables whose update function reads
+        one of the bits that differ from the last cached state.
+        """
+        hit = self._cache.get(state)
+        if hit is not None:
+            target, changes = hit
+            self._last_state = state
+            self._last_target = target
+            return changes
+
+        values = self._values_for(state)
+        last_state = self._last_state
+        if last_state is None:
+            target = self._target_of(values)
+        else:
+            target = self._last_target
+            flipped = last_state ^ state
+            if flipped:
+                if (flipped & (flipped - 1)) == 0:
+                    i = flipped.bit_length() - 1
+                    for j in self._dependents[i]:
+                        if self.net._compiled_update[j](values):
+                            target |= 1 << j
+                        else:
+                            target &= ~(1 << j)
+                else:
+                    affected: set[int] = set()
+                    remaining = flipped
+                    while remaining:
+                        bit = remaining & -remaining
+                        i = bit.bit_length() - 1
+                        affected.update(self._dependents[i])
+                        remaining ^= bit
+                    for j in affected:
+                        if self.net._compiled_update[j](values):
+                            target |= 1 << j
+                        else:
+                            target &= ~(1 << j)
+
+        changes = self._changes_from_target(target, state)
+        self._cache[state] = (target, changes)
+        self._last_state = state
+        self._last_target = target
         return changes
 
     def is_steady(self, state: int) -> bool:
