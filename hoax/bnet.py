@@ -18,6 +18,7 @@ lead to the same successor and their probabilities sum to one.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -224,26 +225,45 @@ class BNet:
         """Successor states, i.e. the flips of every subset of the changeable variables."""
         return [nxt for _, _, nxt in self.models(state)]
 
-    def trel(self, state: int, pr: dict[str, float]) -> list[tuple[float, tuple[Model, str, int]]]:
+    def trel(self, state: int, pr: dict[str, float],
+             stutter: bool = True) -> list[tuple[float, tuple[Model, str, int]]]:
         """Build the cumulative transition distribution out of ``state``.
 
         Every successor is reached by firing an independent subset of the
         variables that may change, hence its probability is
         ``PROD_v (p_v if v changes else 1 - p_v)`` over those variables.
         Variables that do not change are unobservable and contribute one.
+
+        With ``stutter=False`` the no-change leaf is removed and the rest
+        renormalised, which is the PrGA stutter-free conditioning.  A
+        steady state (or a state where no variable fires with positive
+        probability) then has no outgoing transition and the empty list is
+        returned.
         """
         entries = self.models(state)
+        if not stutter:
+            entries = [entry for entry in entries if entry[2] != state]
+            if not entries:
+                return []
         total = 0.0
         result: list[tuple[float, tuple[Model, str, int]]] = []
         for model, m_str, nxt in entries:
             total += prob(model, pr)
             result.append((total, (model, m_str, nxt)))
-        assert abs(total - 1.0) < 1e-6, f"cumulative probability {total} for state {state}"
+        if not stutter:
+            if total <= 0.0:
+                return []
+            result = [(cumulative / total, entry)
+                      for cumulative, entry in result]
+        else:
+            assert abs(total - 1.0) < 1e-6, (
+                f"cumulative probability {total} for state {state}")
         result[-1] = (1.0, result[-1][1])
         return result
 
     def sample(self, state: int, pr: dict[str, float], r: float,
-               changes: Optional[list[int]] = None) -> tuple[Model, str, int]:
+               changes: Optional[list[int]] = None,
+               stutter: bool = True) -> tuple[Model, str, int]:
         """Pick a single successor with an explicit uniform draw ``r``.
 
         This is the on-the-fly counterpart of :func:`hoax.util.pick` over
@@ -260,7 +280,12 @@ class BNet:
 
         ``changes`` may be passed in to reuse a cached
         :meth:`potential_changes`.
+
+        With ``stutter=False`` the draw is conditioned on at least one
+        variable firing; :meth:`sample_stutter_free` implements that case.
         """
+        if not stutter:
+            return self.sample_stutter_free(state, pr, r, changes)
         if changes is None:
             changes = self.potential_changes(state)
         lo, hi = 0.0, 1.0
@@ -278,6 +303,129 @@ class BNet:
             else:
                 lo = mid
                 fired[bit] = value == 0
+        return self._assemble(state, changes, fired)
+
+    def sample_stutter_free(self, state: int, pr: dict[str, float], r: float,
+                            changes: Optional[list[int]] = None
+                            ) -> tuple[Model, str, int]:
+        """Pick a successor conditioned on at least one variable firing.
+
+        This is the same lexicographic inverse-CDF descent as :meth:`sample`
+        over the PrGA weights, restricted to the non-empty firing subsets
+        and renormalised.  While no variable has fired yet, the branch
+        probabilities are conditioned on the variables below the current
+        one containing at least one fire.  The probability of *no* fire is
+        accumulated in log space so that the conditioning stays accurate
+        when the firing probabilities are small.
+
+        Raises ``ValueError`` if no variable can fire, since the
+        conditioning event then has probability zero.
+        """
+        if changes is None:
+            changes = self.potential_changes(state)
+        if not changes:
+            raise ValueError("stutter-free sampling is undefined at a steady state")
+        if all(pr[self.names[v]] <= 0.0 for v in changes):
+            raise ValueError(
+                "stutter-free sampling needs a positive firing probability")
+
+        # log P(no fire among changes[:j]) for j = 0 .. k.
+        log_none = [0.0] * (len(changes) + 1)
+        for bit, v in enumerate(changes):
+            p = pr[self.names[v]]
+            log_none[bit + 1] = (
+                -math.inf if p >= 1.0 else log_none[bit] + math.log1p(-p))
+
+        lo, hi = 0.0, 1.0
+        fired = [False] * len(changes)
+        fired_any = False
+        for bit in range(len(changes) - 1, -1, -1):
+            v = changes[bit]
+            value = (state >> v) & 1
+            p = pr[self.names[v]]
+            if fired_any:
+                # The conditioning is already satisfied: plain PrGA split.
+                q = (1.0 - p) if value == 0 else p
+            else:
+                # Probability that the variables below this one contain at
+                # least one fire, given that none has fired so far.
+                rest = -math.expm1(log_none[bit])
+                if value == 0:
+                    q = (1.0 - p) * rest / ((1.0 - p) * rest + p)
+                else:
+                    q = p / (p + (1.0 - p) * rest)
+            q = min(1.0, max(0.0, q))
+            mid = lo + (hi - lo) * q
+            if r < mid:
+                hi = mid
+                fired[bit] = value == 1
+            else:
+                lo = mid
+                fired[bit] = value == 0
+            fired_any = fired_any or fired[bit]
+        return self._assemble(state, changes, fired)
+
+    def sample_async(self, state: int, r: float,
+                     changes: Optional[list[int]] = None
+                     ) -> tuple[Model, str, int]:
+        """Pick one uniformly chosen changeable variable and flip it.
+
+        This is the exact uniform-asynchronous update: no stuttering and no
+        multi-variable flips.  ``r`` is a uniform draw in ``[0, 1)``; a single
+        changeable variable is deterministic and does not need a draw.
+        """
+        if changes is None:
+            changes = self.potential_changes(state)
+        if not changes:
+            raise ValueError("uniform async sampling is undefined at a steady state")
+        idx = min(max(int(r * len(changes)), 0), len(changes) - 1)
+        fired = [False] * len(changes)
+        fired[idx] = True
+        return self._assemble(state, changes, fired)
+
+    def sample_async_weighted(self, state: int, pr: dict[str, float], r: float,
+                              changes: Optional[list[int]] = None
+                              ) -> tuple[Model, str, int]:
+        """Pick one changeable variable with probability proportional to ``p``.
+
+        The absolute scale of the weights cancels.  Variables with zero
+        weight are never selected, and a state whose changeable variables all
+        have zero weight has no weighted-asynchronous transition.
+        """
+        if changes is None:
+            changes = self.potential_changes(state)
+        if not changes:
+            raise ValueError("weighted async sampling is undefined at a steady state")
+        weights = []
+        for v in changes:
+            weight = pr[self.names[v]]
+            if not math.isfinite(weight) or weight < 0.0:
+                raise ValueError(f"invalid firing weight for {self.names[v]}: {weight}")
+            weights.append(weight)
+        total = math.fsum(weights)
+        if total <= 0.0:
+            raise ValueError(
+                "weighted async sampling needs a positive firing weight")
+
+        target = min(max(r, 0.0), 1.0) * total
+        cumulative = 0.0
+        selected = None
+        for bit, weight in enumerate(weights):
+            if weight == 0.0:
+                continue
+            selected = bit
+            cumulative += weight
+            if target < cumulative:
+                break
+
+        assert selected is not None
+        fired = [False] * len(weights)
+        fired[selected] = True
+        return self._assemble(state, changes, fired)
+
+    def _assemble(self, state: int, changes: list[int],
+                  fired: list[bool]) -> tuple[Model, str, int]:
+        """Turn a firing decision per changeable variable into a leaf."""
         nxt = state
         model: list[tuple[str, bool]] = []
         for bit, v in enumerate(changes):
