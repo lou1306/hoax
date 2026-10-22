@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from lark import Lark, Transformer, UnexpectedInput, v_args
 
@@ -86,6 +87,55 @@ def eval_expr(e: Expr, values: dict[str, bool]) -> bool:
         return all(eval_expr(a, values) for a in e.args)
     if isinstance(e, Or):
         return any(eval_expr(a, values) for a in e.args)
+    raise TypeError(f"Unexpected expression {e!r}")
+
+
+CompiledExpr = Callable[[list[bool]], bool]
+
+
+def _combine_and(funcs: tuple[CompiledExpr, ...]) -> CompiledExpr:
+    """Combine closures into a balanced, short-circuiting ``and`` tree."""
+    if not funcs:
+        return lambda values: True
+    if len(funcs) == 1:
+        return funcs[0]
+    mid = len(funcs) // 2
+    left = _combine_and(funcs[:mid])
+    right = _combine_and(funcs[mid:])
+    return lambda values: left(values) and right(values)
+
+
+def _combine_or(funcs: tuple[CompiledExpr, ...]) -> CompiledExpr:
+    """Combine closures into a balanced, short-circuiting ``or`` tree."""
+    if not funcs:
+        return lambda values: False
+    if len(funcs) == 1:
+        return funcs[0]
+    mid = len(funcs) // 2
+    left = _combine_or(funcs[:mid])
+    right = _combine_or(funcs[mid:])
+    return lambda values: left(values) or right(values)
+
+
+def compile_expr(e: Expr, index: dict[str, int]) -> CompiledExpr:
+    """Compile an expression into a closure over a list of Boolean values.
+
+    This removes recursive ``isinstance`` dispatch and dictionary lookups from
+    the evaluation hot path without generating or executing source code.
+    """
+    if isinstance(e, Var):
+        i = index[e.name]
+        return lambda values: values[i]
+    if isinstance(e, Const):
+        value = e.value
+        return lambda values: value
+    if isinstance(e, Not):
+        arg = compile_expr(e.arg, index)
+        return lambda values: not arg(values)
+    if isinstance(e, And):
+        return _combine_and(tuple(compile_expr(a, index) for a in e.args))
+    if isinstance(e, Or):
+        return _combine_or(tuple(compile_expr(a, index) for a in e.args))
     raise TypeError(f"Unexpected expression {e!r}")
 
 
@@ -185,16 +235,21 @@ class BNet:
     def state_values(self, state: int) -> dict[str, bool]:
         return {name: bool((state >> i) & 1) for i, name in enumerate(self.names)}
 
+    @cached_property
+    def _compiled_update(self) -> tuple[CompiledExpr, ...]:
+        """Closures for the update functions, built lazily once per network."""
+        return tuple(compile_expr(e, self.index) for e in self.update)
+
     def potential_changes(self, state: int) -> list[int]:
         """Indices of the variables whose update differs from their current value.
 
         Those are exactly the variables that may fire: a variable that does
         not change cannot fire, and firing it would change it.
         """
-        values = self.state_values(state)
+        values = [bool((state >> i) & 1) for i in range(self.n)]
         return [
-            i for i in range(self.n)
-            if eval_expr(self.update[i], values) != values[self.names[i]]
+            i for i, f in enumerate(self._compiled_update)
+            if f(values) != values[i]
         ]
 
     def models(self, state: int) -> list[tuple[Model, str, int]]:

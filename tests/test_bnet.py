@@ -1,7 +1,7 @@
 import pytest
 
-from hoax.bnet import (And, BNet, Const, Not, Or, Var, eval_expr, parse_bnet,
-                       parse_expr, tokenize)
+from hoax.bnet import (And, BNet, Const, Not, Or, Var, compile_expr,
+                       eval_expr, parse_bnet, parse_expr, tokenize)
 from hoax.bnet_runner import (BnetRunner, SamplingMode, format_state,
                               parse_weight_specs)
 from hoax.drivers import CompositeDriver, RandomDriver
@@ -23,6 +23,14 @@ a, a & b
 
 def all_states(net):
     return range(1 << net.n)
+
+
+def reference_potential_changes(net, state):
+    values = net.state_values(state)
+    return [
+        i for i in range(net.n)
+        if eval_expr(net.update[i], values) != values[net.names[i]]
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +95,27 @@ def test_eval_expr():
     assert eval_expr(net.update[1], {"a": True, "b": True}) is False
 
 
+def test_compile_expr_matches_eval_expr():
+    index = {"a": 0, "b": 1, "c": 2}
+    exprs = [
+        Var("a"),
+        Const(True),
+        Const(False),
+        Not(Var("a")),
+        And((Var("a"), Var("b"))),
+        And((Var("a"), Var("b"), Not(Var("c")), Const(True))),
+        Or((Var("a"), Var("b"))),
+        Or((Var("a"), Var("b"), Not(Var("c")), Const(False))),
+        And(()),
+        Or(()),
+    ]
+    for expr in exprs:
+        compiled = compile_expr(expr, index)
+        for state in range(1 << len(index)):
+            values = [bool((state >> i) & 1) for i in range(len(index))]
+            assert compiled(values) == eval_expr(expr, dict(zip(index, values)))
+
+
 # ---------------------------------------------------------------------------
 # Reference semantics
 # ---------------------------------------------------------------------------
@@ -110,6 +139,13 @@ def test_potential_changes():
     assert rel.potential_changes(1) == [0, 1]
     assert rel.potential_changes(2) == [0, 1]
     assert rel.potential_changes(3) == [0, 1]
+
+
+def test_potential_changes_matches_reference():
+    for text in (TINY, INPUT):
+        net = parse_bnet(text)
+        for state in all_states(net):
+            assert net.potential_changes(state) == reference_potential_changes(net, state)
 
 
 # ---------------------------------------------------------------------------
