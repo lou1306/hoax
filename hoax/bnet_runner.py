@@ -414,6 +414,12 @@ def main() -> None:
         weight: list[str] = typer.Option(
             [], "--weight", "-w", metavar="KEY=VALUE",
             help="Override a firing weight; repeatable."),
+        acceptance: Optional[str] = typer.Option(
+            None, "--acceptance",
+            help="Acceptance condition such as \"Fin(0x1) & Inf(1xx)\"."),
+        acceptance_order: str = typer.Option(
+            "sorted", "--acceptance-order",
+            help="Pattern character order: \"sorted\" or \"file\"."),
     ) -> None:
         seed = os.environ.get("HOAX_SEED")
         if seed is not None:
@@ -430,17 +436,59 @@ def main() -> None:
         runner.init()
         assert runner.state is not None
 
+        monitor = None
+        if acceptance is not None:
+            # Imported only when acceptance monitoring is requested so that a
+            # plain walk never touches the acceptance or symbolic machinery.
+            from .bnet_acceptance import parse_condition
+            from .bnet_monitor import BnetMonitor
+            if acceptance_order not in ("sorted", "file"):
+                raise typer.BadParameter(
+                    "--acceptance-order must be \"sorted\" or \"file\"")
+            order = net.names if acceptance_order == "file" else None
+            try:
+                condition = parse_condition(acceptance, net, order=order)
+            except ValueError as e:
+                raise typer.BadParameter(str(e)) from e
+            monitor = BnetMonitor(condition, runner)
+
         x = 0
+        verdict_seen = False
         for x in range(1, bound + 1):
             sys.stdout.write(format_state(net, runner.state) + "\n")
+
             if runner.is_steady(runner.state):
                 print("Reached a steady state.", file=sys.stderr)
+                if monitor is not None:
+                    terminal = monitor.terminal(runner.state)
+                    print(f"Acceptance: {terminal.name}", file=sys.stderr)
+                    verdict_seen = True
                 break
-            if not runner.step():
-                print("Reached a deadlock state.", file=sys.stderr)
+
+            if monitor is not None and not monitor.is_terminal(runner.state):
+                verdict = monitor.check(runner.state)
+                if verdict is not None:
+                    print(f"Acceptance: {verdict.name}", file=sys.stderr)
+                    verdict_seen = True
+                    break
+
+            try:
+                if not runner.step():
+                    print("Reached a deadlock state.", file=sys.stderr)
+                    break
+            except SteadyState as exc:
+                print("Reached a steady state.", file=sys.stderr)
+                if monitor is not None:
+                    terminal = monitor.terminal(exc.state)
+                    print(f"Acceptance: {terminal.name}", file=sys.stderr)
+                    verdict_seen = True
                 break
         else:
             print("Bound reached.", file=sys.stderr)
+        if monitor is not None and x == bound and not verdict_seen:
+            # The condition was not decided within the step bound.  This is a
+            # non-verdict, not an UNKNOWN.
+            print("No acceptance verdict.", file=sys.stderr)
         toc = datetime.now()
         print(f"hoax,{network.stem},{x},{toc - tic}", file=sys.stderr)
 

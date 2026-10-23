@@ -5,16 +5,15 @@ It parses the small ``Fin``/``Inf`` language in
 :file:`bnet_acceptance.lark`, where a pattern is a Boolean state vector with
 ``x``/``X`` don't-cares and a comma-separated list of patterns is a union.
 
-The current checker implements only the two local interaction-graph rules:
+The checker in this module implements the two cheap interaction-graph rules:
 
 * outside ``sp`` with a frozen required mismatch blocks every pattern, so
   ``Fin(sp)`` is GOOD and ``Inf(sp)`` is BAD;
 * inside a matching pattern with every required bit frozen, the run stays in
   ``sp``, so ``Inf(sp)`` is GOOD and ``Fin(sp)`` is BAD.
 
-Those rules are sound but incomplete.  In every other case no verdict is
-returned (``None``); ``PrefixType.UGLY`` is reserved for the later
-bottom-SCC analysis.
+Those rules are sound but incomplete.  A verdict of ``None`` here means the
+exact symbolic analysis in :mod:`hoax.bnet_symbolic` is still needed.
 """
 
 from __future__ import annotations
