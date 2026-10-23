@@ -1,0 +1,39 @@
+// Grammar for BNet acceptance conditions.
+//
+// This is deliberately separate from the HOA acceptance grammar.  It applies
+// only to the BNet runner and describes an Emerson-Lei condition over sets of
+// Boolean-network states.
+//
+// A pattern is a fixed-width Boolean state vector with `x`/`X` wildcards.
+// A comma-separated list of patterns denotes their union:
+//
+//     Fin(0x1, 10x) & Inf(1xx)
+//
+// The grammar is LALR(1).  `&` and `|` have equal precedence and expressions
+// are right-associative, matching the actual behaviour of the HOA acceptance
+// parser used by hoax.  Parentheses override this:
+//
+//     Fin(A) & Fin(B) | Fin(C)    // Fin(A) & (Fin(B) | Fin(C))
+//
+// There is intentionally no negation or Boolean constant: every Emerson-Lei
+// formula can be normalised to a positive combination of Fin/Inf atoms.
+// Pattern width is checked later, when the grammar is used with a network.
+
+start: formula
+
+?formula: primary
+        | primary "&" formula   -> and_
+        | primary "|" formula   -> or_
+
+?primary: "Fin" "(" pattern_list ")"  -> fin
+        | "Inf" "(" pattern_list ")"  -> inf
+        | "(" formula ")"
+
+pattern_list: pattern ("," pattern)*
+
+pattern: PATTERN
+
+PATTERN: /[01xX]+/
+
+WS: /[ \t\f\v\r\n]+/
+%ignore WS
