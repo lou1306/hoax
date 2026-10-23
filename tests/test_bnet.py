@@ -1,7 +1,13 @@
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
-from hoax.bnet import (And, BNet, Const, Not, Or, Var, compile_expr,
-                       eval_expr, parse_bnet, parse_expr, tokenize)
+import hoax.bnet_runner as bnet_runner
+from hoax.bnet import (And, BNet, Const, Not, Or, SteadyState, Var,
+                       compile_expr, eval_expr, parse_bnet, parse_expr,
+                       tokenize)
 from hoax.bnet_runner import (BnetRunner, SamplingMode, format_state,
                               parse_weight_specs)
 from hoax.drivers import CompositeDriver, RandomDriver
@@ -817,3 +823,114 @@ def test_runner_rejects_invalid_weight_overrides():
         BnetRunner(net, RandomDriver(list(net.names)), weights={"z": 0.1})
     with pytest.raises(ValueError, match="finite number"):
         BnetRunner(net, RandomDriver(list(net.names)), weights={"a": 1.1})
+
+
+# ---------------------------------------------------------------------------
+# Enabled transitions and frozen variables
+# ---------------------------------------------------------------------------
+
+def test_enabled_successors_respect_forced_and_impossible_firings():
+    net = parse_bnet("targets, factors\na, !a\nb, !b\n")
+
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)), weights={"a": 1.0, "b": 0.5})
+    runner.init(state=0)
+    # a must fire, b may fire.
+    assert set(runner.enabled_successors(0)) == {0b01, 0b11}
+
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)),
+        mode=SamplingMode.STUTTERING, weights={"a": 0.5, "b": 0.5})
+    runner.init(state=0)
+    # Stuttering keeps the empty firing set.
+    assert set(runner.enabled_successors(0)) == {0b00, 0b01, 0b10, 0b11}
+
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)),
+        mode=SamplingMode.ASYNC_UNIFORM)
+    runner.init(state=0)
+    # Async fires exactly one unstable variable.
+    assert set(runner.enabled_successors(0)) == {0b01, 0b10}
+
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)), weights={"a": 0.5, "b": 0.0})
+    runner.init(state=0)
+    assert set(runner.enabled_successors(0)) == {0b01}
+
+
+def test_changeable_mask_uses_interaction_closure():
+    net = parse_bnet("targets, factors\na, !a\nb, a\n")
+    runner = BnetRunner(net, RandomDriver(list(net.names)))
+    runner.init(state=0)
+    # a is unstable and influences b, even though b is stable now.
+    assert runner.changeable_mask(0) == 0b11
+
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)), weights={"b": 0.0})
+    runner.init(state=0)
+    # A zero-weight variable can never fire, so it is frozen.
+    assert runner.changeable_mask(0) == 0b01
+
+
+def test_changeable_mask_empty_at_fixed_point():
+    net = parse_bnet("targets, factors\na, b\nb, a\n")
+    runner = BnetRunner(net, RandomDriver(list(net.names)))
+    runner.init(state=0)
+    assert runner.changeable_mask(0) == 0
+    runner.init(state=1)
+    assert runner.changeable_mask(1) == 0b11
+
+
+def test_steady_state_is_raised_before_prg_draw(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        bnet_runner, "PRG_UNIFORM", lambda: calls.append(1) or 0.5)
+
+    net = parse_bnet("targets, factors\na, a\n")
+    runner = BnetRunner(net, RandomDriver(list(net.names)))
+    runner.init(state=0)
+    with pytest.raises(SteadyState) as exc:
+        runner.step()
+    assert exc.value.state == 0
+    assert calls == []
+
+    # An unstable variable with zero firing probability is terminal too.
+    net = parse_bnet("targets, factors\na, !a\n")
+    runner = BnetRunner(
+        net, RandomDriver(list(net.names)), weights={"a": 0.0})
+    runner.init(state=0)
+    with pytest.raises(SteadyState):
+        runner.step()
+    assert calls == []
+
+
+def test_sample_stutter_free_raises_steady_state():
+    net = parse_bnet("targets, factors\na, !a\n")
+    with pytest.raises(SteadyState):
+        net.sample(0, {"a": 0.0}, 0.0, stutter=False)
+    assert issubclass(SteadyState, ValueError)
+
+
+def test_runner_does_not_import_acceptance():
+    code = (
+        "import sys, hoax.bnet_runner; "
+        "assert 'hoax.bnet_acceptance' not in sys.modules")
+    subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parent.parent, check=True)
+
+
+def test_step_does_not_touch_acceptance_helpers(monkeypatch):
+    net = parse_bnet(TINY)
+    runner = BnetRunner(net, RandomDriver(list(net.names)))
+    runner.init(state=0)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("acceptance helper called during a plain walk")
+
+    monkeypatch.setattr(BnetRunner, "enabled_changes", fail)
+    monkeypatch.setattr(BnetRunner, "changeable_mask", fail)
+    monkeypatch.setattr(BnetRunner, "enabled_successors", fail)
+    for _ in range(20):
+        runner.step()
+    assert runner._changeable_cache is None

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from enum import Enum
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from random import choice
@@ -14,6 +13,7 @@ from networkit.graph import Graph  # type: ignore
 
 from .drivers import Driver, UserDriver
 from .hoa import Automaton, Transition, fmt_edge, fmt_state, parse
+from .verdict import PrefixType
 
 
 class Action(ABC):
@@ -373,19 +373,6 @@ class Quit(Action):
 
     def run(self, runner):
         raise StopRunner()
-
-
-class PrefixType(Enum):
-    GOOD = 1
-    BAD = 2
-    UGLY = 3
-
-    def invert(self) -> "PrefixType":
-        if self == PrefixType.GOOD:
-            return PrefixType.BAD
-        if self == PrefixType.BAD:
-            return PrefixType.GOOD
-        return self
 
 
 class AcceptanceChecker(Condition):

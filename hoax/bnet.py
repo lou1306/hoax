@@ -35,6 +35,19 @@ class Expr:
     """Base class for Boolean-network update expressions."""
 
 
+class SteadyState(ValueError):
+    """Raised when a stutter-free walk has no positive-probability successor.
+
+    The carried ``state`` is the terminal state.  This is an operational
+    signal: no successor run exists under stutter-free sampling.  Acceptance
+    monitoring may still classify the terminal state explicitly.
+    """
+
+    def __init__(self, state: int) -> None:
+        self.state = state
+        super().__init__(f"no stutter-free successor from state {state}")
+
+
 @dataclass(frozen=True)
 class Var(Expr):
     name: str
@@ -378,10 +391,9 @@ class BNet:
         if changes is None:
             changes = self.potential_changes(state)
         if not changes:
-            raise ValueError("stutter-free sampling is undefined at a steady state")
+            raise SteadyState(state)
         if all(pr[self.names[v]] <= 0.0 for v in changes):
-            raise ValueError(
-                "stutter-free sampling needs a positive firing probability")
+            raise SteadyState(state)
 
         # log P(no fire among changes[:j]) for j = 0 .. k.
         log_none = [0.0] * (len(changes) + 1)

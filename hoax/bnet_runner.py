@@ -17,7 +17,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Sequence
 
-from .bnet import BNet, parse_bnet_file, vars_of
+from .bnet import BNet, SteadyState, parse_bnet_file, vars_of
 from .drivers import Driver, RandomDriver
 from .util import PRG_SEED, PRG_UNIFORM, logger
 
@@ -99,6 +99,15 @@ class BnetRunner:
         self.candidates: list[tuple[int, str]] = []
         self.pr = self.get_weights()
         self.pr.update(self.weights)
+        # Keep the common all-positive case out of the sampling hot path.
+        # ``_positive`` is only needed for zero-weight networks and by the
+        # acceptance monitor.
+        self._all_positive = all(w > 0.0 for w in self.pr.values())
+        self._positive = (
+            frozenset() if self._all_positive
+            else frozenset(i for i, name in enumerate(self.net.names)
+                           if self.pr[name] > 0.0))
+        self._changeable_cache: Optional[dict[int, int]] = None
 
         if self.mode is SamplingMode.ASYNC_UNIFORM and self.weights:
             raise ValueError("uniform async does not use weight overrides")
@@ -148,6 +157,83 @@ class BnetRunner:
             for name in vars_of(expr):
                 dependents[self.net.index[name]].append(j)
         return dependents
+
+    def enabled_changes(self, state: int) -> list[int]:
+        """Unstable variables that can fire in the active mode."""
+        changes = self.potential_changes(state)
+        if self.mode is SamplingMode.ASYNC_UNIFORM or self._all_positive:
+            # Uniform async ignores firing weights entirely; when every
+            # weight is positive, every unstable variable is enabled.
+            return changes
+        return [v for v in changes if v in self._positive]
+
+    def changeable_mask(self, state: int) -> int:
+        """Bitmask of variables that can change at least once from ``state``.
+
+        This is the forward closure of the currently enabled variables in the
+        interaction graph, excluding variables that can never fire.  A
+        variable outside the mask is frozen for the rest of the run.
+        """
+        hit = self._changeable_cache.get(state) if self._changeable_cache else None
+        if hit is not None:
+            return hit
+        if self._changeable_cache is None:
+            self._changeable_cache = {}
+
+        mask = 0
+        stack: list[int] = []
+        for v in self.enabled_changes(state):
+            bit = 1 << v
+            if not mask & bit:
+                mask |= bit
+                stack.append(v)
+
+        while stack:
+            v = stack.pop()
+            for j in self._dependents[v]:
+                if (not self._all_positive
+                        and self.mode is not SamplingMode.ASYNC_UNIFORM
+                        and j not in self._positive):
+                    continue
+                bit = 1 << j
+                if mask & bit:
+                    continue
+                mask |= bit
+                stack.append(j)
+
+        self._changeable_cache[state] = mask
+        return mask
+
+    def enabled_successors(self, state: int) -> list[int]:
+        """Successors with positive probability under the active mode.
+
+        ``p = 0`` variables are never fired and ``p = 1`` variables are forced
+        when they are unstable.  Stutter-free sampling additionally excludes
+        the empty firing set; stuttering includes it as a self-loop.
+        """
+        enabled = self.enabled_changes(state)
+
+        if self.mode in (SamplingMode.ASYNC_UNIFORM,
+                         SamplingMode.ASYNC_WEIGHTED):
+            return [state ^ (1 << v) for v in enabled]
+
+        forced = [v for v in enabled
+                  if self.pr[self.net.names[v]] >= 1.0]
+        optional = [v for v in enabled
+                    if self.pr[self.net.names[v]] < 1.0]
+        base = 0
+        for v in forced:
+            base |= 1 << v
+
+        result: list[int] = []
+        for mask in range(1 << len(optional)):
+            fired = base
+            for bit, v in enumerate(optional):
+                if mask & (1 << bit):
+                    fired |= 1 << v
+            if fired or self.mode is SamplingMode.STUTTERING:
+                result.append(state ^ fired)
+        return result
 
     @staticmethod
     def _changes_from_target(target: int, state: int) -> list[int]:
@@ -281,9 +367,20 @@ class BnetRunner:
             # leaf, matching the reference ``pick()``: a steady state (one
             # stutter leaf) and a stutter-free state with a single changeable
             # variable (one non-empty leaf) both involve no choice at all.
-            single = (len(changes) <= 1
-                      if self.mode is SamplingMode.STUTTER_FREE
-                      else not changes)
+            if self.mode is SamplingMode.STUTTER_FREE:
+                if len(changes) <= 1:
+                    single = True
+                else:
+                    # If every unstable variable has probability zero, no
+                    # successor exists.  Checking here avoids consuming a draw
+                    # before ``sample_stutter_free`` raises.  The all-positive
+                    # fast path skips this check for ordinary networks.
+                    if (not self._all_positive
+                            and self._positive.isdisjoint(changes)):
+                        raise SteadyState(self.state)
+                    single = False
+            else:
+                single = not changes
             r = 0.0 if single else PRG_UNIFORM()
             model, m_str, next_state = self.net.sample(
                 self.state, self.pr, r, changes,

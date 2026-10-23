@@ -18,6 +18,14 @@
 // There is intentionally no negation or Boolean constant: every Emerson-Lei
 // formula can be normalised to a positive combination of Fin/Inf atoms.
 // Pattern width is checked later, when the grammar is used with a network.
+//
+// The runtime parser is checked in as hoax/_bnet_acceptance_parser.py.  After
+// changing this grammar, regenerate it with:
+//
+//     python -m lark.tools.standalone hoax/bnet_acceptance.lark \
+//         -o hoax/_bnet_acceptance_parser.py
+//
+// Tests still use lark directly to check the grammar itself.
 
 start: formula
 
