@@ -200,8 +200,7 @@ class SymbolicEngine:
             i: bool((state >> i) & 1) for i in range(net.n)
             if i not in self._variables}
         self._pattern_cache: dict[tuple[int, int], BDDFunction] = {}
-        self._reach: Optional[BDDFunction] = None
-
+        self._reach: BDDFunction
         self._transition = self._build_transition()
         self._reach = self._reach_from(self._initial_cube(), self.manager.true())
 
@@ -479,8 +478,7 @@ def symbolic_verdict(condition: Condition, runner,
     starts = runner.enabled_changes(state)
     base_order = _bfs_order(runner.net, variables, starts)
     orders: list[tuple[int, ...]] = []
-    for candidate in (base_order, list(reversed(base_order))):
-        candidate = tuple(candidate)
+    for candidate in (tuple(base_order), tuple(reversed(base_order))):
         if candidate not in orders:
             orders.append(candidate)
 

@@ -62,7 +62,7 @@ class BnetMonitor:
 
         try:
             from .bnet_symbolic import symbolic_verdict
-        except Exception:
+        except ModuleNotFoundError:
             # oxidd is not available: stay conservative and report no verdict.
             return None
         verdict = symbolic_verdict(self.condition, self.runner, state=state)

@@ -152,7 +152,7 @@ class BnetRunner:
 
     def _build_dependents(self) -> list[list[int]]:
         """Out-neighbours of each variable in the network's interaction graph."""
-        dependents = [[] for _ in range(self.net.n)]
+        dependents: list[list[int]] = [[] for _ in range(self.net.n)]
         for j, expr in enumerate(self.net.update):
             for name in vars_of(expr):
                 dependents[self.net.index[name]].append(j)

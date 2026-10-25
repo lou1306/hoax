@@ -6,9 +6,6 @@ from typing import TypeVar
 
 import fastrand  # type: ignore
 
-logging.basicConfig()
-logging.root.setLevel(logging.NOTSET)
-logging.root.handlers.clear()
 logger = logging.getLogger("hoax")
 
 PRG_DEFAULT_SEED = int.from_bytes(os.urandom(4))
