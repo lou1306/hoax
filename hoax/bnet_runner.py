@@ -463,9 +463,7 @@ def main() -> None:
                     break
 
             try:
-                if not runner.step():
-                    print("Reached a deadlock state.", file=sys.stderr)
-                    break
+                runner.step()
             except SteadyState as exc:
                 print("Reached a steady state.", file=sys.stderr)
                 if monitor is not None:
