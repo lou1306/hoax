@@ -37,7 +37,7 @@ class CompositeDriver(Driver):
         super().__init__()
         self.drivers: list[Driver] = []
 
-    def append(self, driver: Driver):
+    def append(self, driver: Driver) -> None:
         self.drivers.append(driver)
         assert all(ap not in self.aps for ap in driver.aps), \
             "Some APs have multiple drivers: " \
@@ -50,7 +50,7 @@ class CompositeDriver(Driver):
             result |= d.get()
         return result
 
-    def get_drivers(self):
+    def get_drivers(self) -> Iterable["Driver"]:
         yield from self.drivers
 
 
@@ -58,17 +58,7 @@ class UserDriver(Driver):
     def __init__(self, aps: list[str]) -> None:
         super().__init__(aps)
 
-    @staticmethod
-    def handle(in_str: str) -> bool:
-        in_str = in_str.strip().lower()
-        try:
-            in_int = int(in_str)
-            return bool(in_int)
-        except ValueError:
-            pass
-        return False if in_str in ('false', 'null', '') else bool(in_str)
-
-    def get(self):
+    def get(self) -> set:
         result = set()
         for ap in self.aps:
             value = handle(input(f"{ap}? "))
@@ -76,14 +66,14 @@ class UserDriver(Driver):
                 result.add(ap)
         return result
 
-    def get_drivers(self):
+    def get_drivers(self) -> Iterable["Driver"]:
         yield self
 
 
 class RandomDriver(Driver):
     pop = True, False
 
-    def __init__(self, aps) -> None:
+    def __init__(self, aps: list[str]) -> None:
         super().__init__(aps)
         self.k = len(self.aps)
         self.cum_weights: tuple[float, int] = (0.5, 1)
@@ -92,12 +82,13 @@ class RandomDriver(Driver):
         result = choices(self.pop, k=self.k, cum_weights=self.cum_weights)
         return set(ap for ap, value in zip(self.aps, result) if value)
 
-    def get_drivers(self):
+    def get_drivers(self) -> Iterable["Driver"]:
         yield self
 
 
 class StreamDriver(Driver):
-    def __init__(self, aps, stream: TextIOWrapper, diff: bool = False) -> None:
+    def __init__(self, aps: list[str], stream: TextIOWrapper,
+                 diff: bool = False) -> None:
         super().__init__(aps)
         self.diff = diff
         self.stream = stream
@@ -108,7 +99,7 @@ class StreamDriver(Driver):
     def read_next(self) -> set:
         raise NotImplementedError
 
-    def get_drivers(self):
+    def get_drivers(self) -> Iterable["Driver"]:
         yield self
 
 
@@ -119,12 +110,12 @@ class JSONDriver(StreamDriver):
 
 
 class SimpleTxtDriver(StreamDriver):
-    def read_next(self):
+    def read_next(self) -> set:
         line = self.stream.readline()
         if not line:
             self.stream.close()
             raise EndOfFiniteTrace(self.stream.name)
-        data = set()
+        data: set[str] = set()
         while line:
             if line == "\n":
                 return data
