@@ -10,7 +10,7 @@ from hoax.bnet_runner import BnetRunner, SamplingMode
 from hoax.bnet_symbolic import (_bfs_order, _dnf, _dual, SymbolicEngine,
                                 symbolic_verdict)
 from hoax.drivers import RandomDriver
-from hoax.verdict import PrefixType
+from hoax.verdict import PrefixType, Undecided
 
 
 def make_runner(net, state, mode=SamplingMode.STUTTER_FREE, weights=None):
@@ -150,7 +150,7 @@ def _brute_force_verdict(condition, init, adjacency):
         return PrefixType.GOOD
     if dual:
         return PrefixType.BAD
-    return None
+    return Undecided.INCONCLUSIVE
 
 
 def test_exact_verdict_matches_brute_force():

@@ -933,4 +933,4 @@ def test_step_does_not_touch_acceptance_helpers(monkeypatch):
     monkeypatch.setattr(BnetRunner, "enabled_successors", fail)
     for _ in range(20):
         runner.step()
-    assert runner._changeable_cache is None
+    assert runner._changeable_vars_cache is None

@@ -9,8 +9,9 @@ BDD fixpoints.  The result is a three-valued prefix verdict:
 * ``BAD``: every infinite extension violates it;
 * ``UGLY``: both kinds of extension exist.
 
-``None`` means that the analysis did not finish within its budget.  It is not
-an ``UNKNOWN`` verdict.
+``Undecided`` marks a non-verdict outcome.  ``Undecided.INCONCLUSIVE`` is a
+structural non-decision; ``Undecided.TIMEOUT`` means the analysis did not
+finish within its budget.  Neither is an ``UNKNOWN`` verdict.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from oxidd.util import DDMemoryError
 from .bnet import BNet, Expr, And as ExprAnd, Const, Not, Or as ExprOr, Var
 from .bnet_acceptance import (And, Condition, Fin, Inf, Or, Pattern)
 from .bnet_runner import SamplingMode
-from .verdict import PrefixType
+from .verdict import PrefixType, Undecided
 
 DEFAULT_MAX_NODES = 1_000_000
 DEFAULT_MAX_SECONDS = 10.0
@@ -443,7 +444,7 @@ class SymbolicEngine:
             return False
         return self._scc_satisfies(outside, inf_sets)
 
-    def verdict(self, condition: Condition) -> PrefixType | None:
+    def verdict(self, condition: Condition) -> PrefixType | Undecided:
         """Exact three-valued verdict for the current prefix."""
         some = any(self.sat_some_term(term) for term in _dnf(condition))
         some_dual = any(self.sat_some_term(term)
@@ -455,9 +456,9 @@ class SymbolicEngine:
         if some_dual:
             return PrefixType.BAD
         # With the sink self-loop there is always an infinite path, so this is
-        # unreachable for a well-formed condition.  Treat it as undecided
-        # rather than inventing an UNKNOWN verdict.
-        return None
+        # unreachable for a well-formed condition.  Treat it as structurally
+        # undecided rather than inventing an UNKNOWN verdict.
+        return Undecided.INCONCLUSIVE
 
 
 def symbolic_verdict(condition: Condition, runner,
@@ -466,8 +467,10 @@ def symbolic_verdict(condition: Condition, runner,
                      max_seconds: float = DEFAULT_MAX_SECONDS,
                      max_sccs: int = DEFAULT_MAX_SCCS,
                      max_iterations: int = DEFAULT_MAX_ITERATIONS
-                     ) -> PrefixType | None:
-    """Run the exact BDD check, returning ``None`` if the budget is exhausted."""
+                     ) -> PrefixType | Undecided:
+    """Run the exact BDD check, returning ``Undecided.TIMEOUT`` if the budget
+    is exhausted and ``Undecided.INCONCLUSIVE`` for a structural non-decision.
+    """
     if state is None:
         state = runner.state
     assert state is not None
@@ -491,4 +494,4 @@ def symbolic_verdict(condition: Condition, runner,
             return engine.verdict(condition)
         except (SymbolicBudgetExceeded, DDMemoryError):
             continue
-    return None
+    return Undecided.TIMEOUT

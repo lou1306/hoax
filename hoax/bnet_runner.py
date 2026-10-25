@@ -17,6 +17,8 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Sequence
 
+from cachetools import LRUCache
+
 from .bnet import BNet, SteadyState, parse_bnet_file, vars_of
 from .drivers import Driver, RandomDriver
 from .util import PRG_SEED, PRG_UNIFORM, logger
@@ -78,7 +80,10 @@ class BnetRunner:
 
     def __init__(self, net: BNet, drv: Driver,
                  mode: SamplingMode | str = SamplingMode.STUTTER_FREE,
-                 weights: Optional[Mapping[str, float]] = None) -> None:
+                 weights: Optional[Mapping[str, float]] = None,
+                 cache_size: int = 100_000) -> None:
+        if cache_size < 1:
+            raise ValueError("cache_size must be at least 1")
         self.net = net
         self.driver = drv
         self.mode = SamplingMode(mode)
@@ -87,7 +92,9 @@ class BnetRunner:
         self._validate_weights()
         self.state: Optional[int] = None
         self._count = 0
-        self._cache: dict[int, tuple[int, list[int]]] = {}
+        self._cache_size = cache_size
+        self._unstable_set_cache: LRUCache[int, tuple[int, list[int]]] = LRUCache(
+            maxsize=cache_size)
         self._dependents = self._build_dependents()
         self._values: list[bool] = []
         self._values_state: Optional[int] = None
@@ -107,7 +114,7 @@ class BnetRunner:
             frozenset() if self._all_positive
             else frozenset(i for i, name in enumerate(self.net.names)
                            if self.pr[name] > 0.0))
-        self._changeable_cache: Optional[dict[int, int]] = None
+        self._changeable_vars_cache: Optional[LRUCache[int, int]] = None
 
         if self.mode is SamplingMode.ASYNC_UNIFORM and self.weights:
             raise ValueError("uniform async does not use weight overrides")
@@ -174,11 +181,11 @@ class BnetRunner:
         interaction graph, excluding variables that can never fire.  A
         variable outside the mask is frozen for the rest of the run.
         """
-        hit = self._changeable_cache.get(state) if self._changeable_cache else None
+        hit = self._changeable_vars_cache.get(state) if self._changeable_vars_cache is not None else None
         if hit is not None:
             return hit
-        if self._changeable_cache is None:
-            self._changeable_cache = {}
+        if self._changeable_vars_cache is None:
+            self._changeable_vars_cache = LRUCache(maxsize=self._cache_size)
 
         mask = 0
         stack: list[int] = []
@@ -201,7 +208,7 @@ class BnetRunner:
                 mask |= bit
                 stack.append(j)
 
-        self._changeable_cache[state] = mask
+        self._changeable_vars_cache[state] = mask
         return mask
 
     def enabled_successors(self, state: int) -> list[int]:
@@ -266,7 +273,7 @@ class BnetRunner:
         """Compute and cache the target and changes for ``state`` from scratch."""
         target = self._target_of(self._values_for(state))
         changes = self._changes_from_target(target, state)
-        self._cache[state] = (target, changes)
+        self._unstable_set_cache[state] = (target, changes)
         self._last_state = state
         self._last_target = target
         return target, changes
@@ -281,7 +288,7 @@ class BnetRunner:
         self.count = 0
         self._values = []
         self._values_state = None
-        hit = self._cache.get(state)
+        hit = self._unstable_set_cache.get(state)
         if hit is None:
             self._seed_cache(state)
         else:
@@ -304,7 +311,7 @@ class BnetRunner:
         target mask is updated only for variables whose update function reads
         one of the bits that differ from the last cached state.
         """
-        hit = self._cache.get(state)
+        hit = self._unstable_set_cache.get(state)
         if hit is not None:
             target, changes = hit
             self._last_state = state
@@ -331,7 +338,7 @@ class BnetRunner:
                     target &= ~(1 << j)
 
         changes = self._changes_from_target(target, state)
-        self._cache[state] = (target, changes)
+        self._unstable_set_cache[state] = (target, changes)
         self._last_state = state
         self._last_target = target
         return changes
@@ -410,6 +417,9 @@ def main() -> None:
         acceptance_order: str = typer.Option(
             "sorted", "--acceptance-order",
             help="Pattern character order: \"sorted\" or \"file\"."),
+        cache_size: int = typer.Option(
+            100_000, "--cache-size",
+            help="Max number of cached states (>= 1)."),
     ) -> None:
         seed = os.environ.get("HOAX_SEED")
         if seed is not None:
@@ -422,7 +432,8 @@ def main() -> None:
         except ValueError as e:
             raise typer.BadParameter(str(e)) from e
         runner = BnetRunner(
-            net, RandomDriver(list(net.names)), mode=mode, weights=weights)
+            net, RandomDriver(list(net.names)), mode=mode, weights=weights,
+            cache_size=cache_size)
         runner.init()
         assert runner.state is not None
 
@@ -440,7 +451,7 @@ def main() -> None:
                 condition = parse_condition(acceptance, net, order=order)
             except ValueError as e:
                 raise typer.BadParameter(str(e)) from e
-            monitor = BnetMonitor(condition, runner)
+            monitor = BnetMonitor(condition, runner, cache_size=cache_size)
 
         x = 0
         verdict_seen = False
@@ -477,6 +488,9 @@ def main() -> None:
             # The condition was not decided within the step bound.  This is a
             # non-verdict, not an UNKNOWN.
             print("No acceptance verdict.", file=sys.stderr)
+            if monitor.timeout_occurred:
+                print("Acceptance may be GOOD/BAD: an exact check timed out, "
+                      "so this trace is inconclusive.", file=sys.stderr)
         toc = datetime.now()
         print(f"hoax,{network.stem},{x},{toc - tic}", file=sys.stderr)
 

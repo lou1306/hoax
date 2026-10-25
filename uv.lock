@@ -3,6 +3,15 @@ revision = 3
 requires-python = ">=3.12, <3.15"
 
 [[package]]
+name = "cachetools"
+version = "7.2.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/e5/43f9a3f926cc182a0ee95cfd53ec0b5ac0e2cdafa184af6fc50166fd03fd/cachetools-7.2.5.tar.gz", hash = "sha256:a2223b80de434291ddf4c105354e533bbaf4d29382f5d1bc3e4b9332cb31061e", size = 46088, upload-time = "2026-10-25T08:53:17.172Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/bd/bd8f45fbdf05ce06dbadda61bf0a09844bb0cf0a048d7f5c4a368d437e24/cachetools-7.2.5-py3-none-any.whl", hash = "sha256:9033308cc26b678784a27b096aab1541b9e698d785c3e9918b691ccd458d88df", size = 19132, upload-time = "2026-10-25T08:53:15.638Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -82,6 +91,7 @@ name = "hoax-hoa-executor"
 version = "0.1.6"
 source = { editable = "." }
 dependencies = [
+    { name = "cachetools" },
     { name = "fastrand" },
     { name = "hoa-utils-redux" },
     { name = "msgpack" },
@@ -102,6 +112,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cachetools", specifier = ">=5.5.0" },
     { name = "fastrand", specifier = ">=3.0.8" },
     { name = "hoa-utils-redux", specifier = ">=0.2.0" },
     { name = "msgpack", specifier = ">=1.1.0" },

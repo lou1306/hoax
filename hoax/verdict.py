@@ -11,6 +11,11 @@ A prefix is
 * ``UGLY`` when both an accepting and a rejecting extension exist.
 
 ``None`` is not a verdict: it means the monitor has not decided yet.
+
+``Undecided`` is likewise not a verdict: it reports *why* an exact symbolic
+check stopped without a decision.  ``Undecided.INCONCLUSIVE`` means the
+condition is structurally undecidable from the prefix; ``Undecided.TIMEOUT``
+means the analysis hit its budget.
 """
 
 from enum import Enum
@@ -27,3 +32,14 @@ class PrefixType(Enum):
         if self == PrefixType.BAD:
             return PrefixType.GOOD
         return self
+
+
+class Undecided(Enum):
+    """Why an exact symbolic check ended without a three-valued verdict.
+
+    ``TIMEOUT`` and ``INCONCLUSIVE`` are treated identically by the monitor
+    (both are cached and never recomputed), but ``TIMEOUT`` is tracked so a
+    definitive-but-inconclusive trace can warn that it might be GOOD or BAD.
+    """
+    INCONCLUSIVE = 0  # structurally undecidable from the prefix
+    TIMEOUT = 1       # budget exhausted (transient in principle)
