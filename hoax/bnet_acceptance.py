@@ -210,9 +210,29 @@ def _or(check: list[PrefixType | None]) -> PrefixType | None:
     return None
 
 
-@dataclass(frozen=True)
-class And(Condition):
+class _Binary(Condition):
+    """Base for the ``And``/``Or`` combinators.
+
+    Both share the tuple of sub-conditions, the flattened ``atoms()`` and the
+    parenthesised ``__str__``; subclasses supply only the combining rules and
+    the operator separator.
+    """
+
     conditions: tuple[Condition, ...]
+    operator: str
+
+    def atoms(self) -> Iterable[Condition]:
+        for condition in self.conditions:
+            yield from condition.atoms()
+
+    def __str__(self) -> str:
+        return "(" + f" {self.operator} ".join(str(c) for c in self.conditions) + ")"
+
+
+@dataclass(frozen=True)
+class And(_Binary):
+    conditions: tuple[Condition, ...]
+    operator = "&"
 
     def check(self, runner: "BnetRunner") -> PrefixType | None:
         return _and([c.check(runner) for c in self.conditions])
@@ -221,17 +241,11 @@ class And(Condition):
         values = [c.terminal(state) for c in self.conditions]
         return PrefixType.BAD if PrefixType.BAD in values else PrefixType.GOOD
 
-    def atoms(self) -> Iterable[Condition]:
-        for condition in self.conditions:
-            yield from condition.atoms()
-
-    def __str__(self) -> str:
-        return "(" + " & ".join(str(c) for c in self.conditions) + ")"
-
 
 @dataclass(frozen=True)
-class Or(Condition):
+class Or(_Binary):
     conditions: tuple[Condition, ...]
+    operator = "|"
 
     def check(self, runner: "BnetRunner") -> PrefixType | None:
         return _or([c.check(runner) for c in self.conditions])
@@ -239,10 +253,3 @@ class Or(Condition):
     def terminal(self, state: int) -> PrefixType:
         values = [c.terminal(state) for c in self.conditions]
         return PrefixType.GOOD if PrefixType.GOOD in values else PrefixType.BAD
-
-    def atoms(self) -> Iterable[Condition]:
-        for condition in self.conditions:
-            yield from condition.atoms()
-
-    def __str__(self) -> str:
-        return "(" + " | ".join(str(c) for c in self.conditions) + ")"
