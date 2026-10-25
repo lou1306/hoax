@@ -317,28 +317,18 @@ class BnetRunner:
             target = self._target_of(values)
         else:
             target = self._last_target
-            flipped = last_state ^ state
-            if flipped:
-                if (flipped & (flipped - 1)) == 0:
-                    i = flipped.bit_length() - 1
-                    for j in self._dependents[i]:
-                        if self.net._compiled_update[j](values):
-                            target |= 1 << j
-                        else:
-                            target &= ~(1 << j)
+            affected: set[int] = set()
+            remaining = last_state ^ state
+            while remaining:
+                bit = remaining & -remaining
+                i = bit.bit_length() - 1
+                affected.update(self._dependents[i])
+                remaining ^= bit
+            for j in affected:
+                if self.net._compiled_update[j](values):
+                    target |= 1 << j
                 else:
-                    affected: set[int] = set()
-                    remaining = flipped
-                    while remaining:
-                        bit = remaining & -remaining
-                        i = bit.bit_length() - 1
-                        affected.update(self._dependents[i])
-                        remaining ^= bit
-                    for j in affected:
-                        if self.net._compiled_update[j](values):
-                            target |= 1 << j
-                        else:
-                            target &= ~(1 << j)
+                    target &= ~(1 << j)
 
         changes = self._changes_from_target(target, state)
         self._cache[state] = (target, changes)
