@@ -34,7 +34,9 @@ class TomlV1(Struct):
             "flip": drivers.RandomDriver,
             "user": drivers.UserDriver,
             "json": drivers.JSONDriver,
-            "txt": drivers.SimpleTxtDriver}
+            "txt": drivers.SimpleTxtDriver,
+            "assumption": drivers.AssumptionTxtDriver}
+
 
         version: Annotated[int, Meta(ge=1, le=1)]
         name: Optional[str] = None
@@ -106,11 +108,32 @@ class TomlV1(Struct):
             def get_driver(self, aps, base_path: Path) -> drivers.SimpleTxtDriver:    # noqa: E501
                 stream = open(resolve(self.filename, base_path))
                 return drivers.SimpleTxtDriver(extract_aps(aps, self.aps), stream)  # noqa: E501
+        class AssumptionDriver(Struct):
+            aps: set[str | int]
+            assumption: str
+            assumption_ins: str
+            assumption_outs: str
+            bound: int = 20
+            hoax_config: str = "./examples/random.toml"
+
+            def get_driver(self, aps, base_path: Path):
+                from ..drivers import AssumptionTxtDriver
+                return AssumptionTxtDriver(
+                    aps=list(self.aps),
+                    assumption=self.assumption,
+                    assumption_ins=self.assumption_ins,
+                    assumption_outs=self.assumption_outs,
+                    bound=self.bound,
+                    hoax_config=str(base_path / self.hoax_config)
+                )
+
 
         flip: list[RandomDriver] = field(default_factory=list)
         user: list[UserDriver] = field(default_factory=list)
         json: list[JSONDriver] = field(default_factory=list)
         txt: list[SimpleTxtDriver] = field(default_factory=list)
+        assumption: list[AssumptionDriver] = field(default_factory=list)
+
 
     class RunnerSection(Struct):
         NONDET_VALUES = {
@@ -141,4 +164,4 @@ class TomlV1(Struct):
             raise ValueError(f"APs have multiple drivers: {dups}")
 
     def drivers(self):
-        yield from chain(self.driver.flip, self.driver.user, self.driver.json, self.driver.txt)  # noqa: E501
+        yield from chain(self.driver.flip, self.driver.user, self.driver.json, self.driver.txt, self.driver.assumption)  # noqa: E501

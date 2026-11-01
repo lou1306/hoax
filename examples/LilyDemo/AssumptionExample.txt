@@ -1,0 +1,3 @@
+This is an example of trace generation with an assumption 
+The lily demo has an assumption on the inputs G(cancel -> X(go || X go)). 
+Using the Assumption_Lily_Example.toml, a trace that follows the inputs can be generated.
