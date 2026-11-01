@@ -10,7 +10,7 @@ from hoax.bnet_runner import BnetRunner, SamplingMode
 from hoax.bnet_symbolic import (_bfs_order, _dual, _row_terms, SymbolicEngine,
                                 symbolic_verdict)
 from hoax.drivers import RandomDriver
-from hoax.verdict import PrefixType, Undecided
+from hoax.verdict import PrefixType, Resource, Undecided, UndecidedReason
 
 
 def make_runner(net, state, mode=SamplingMode.STUTTER_FREE, weights=None):
@@ -177,12 +177,12 @@ def _brute_force_verdict(condition, init, adjacency):
     if positive and dual:
         if _all_bottom_sccs_mixed_brute(condition, init, adjacency):
             return PrefixType.UGLY
-        return Undecided.INDETERMINATE
+        return Undecided(UndecidedReason.INDETERMINATE)
     if positive:
         return PrefixType.GOOD
     if dual:
         return PrefixType.BAD
-    return Undecided.INCONCLUSIVE
+    return Undecided(UndecidedReason.INCONCLUSIVE)
 
 
 def test_cell_reused_across_states_in_same_region():
@@ -254,7 +254,7 @@ def test_ugly_requires_bottom_scc():
 
     # The refinement must actually be exercised, not merely be a no-op.
     assert PrefixType.UGLY in seen
-    assert Undecided.INDETERMINATE in seen
+    assert Undecided(UndecidedReason.INDETERMINATE) in seen
 
 
 def test_inf_conjunction_vs_union():
@@ -300,3 +300,14 @@ def test_monitor_reports_terminal_and_verdict():
     monitor = BnetMonitor(condition, runner)
     # 11 is unreachable, so Inf is false on the only infinite path.
     assert monitor.check(runner.state) is PrefixType.BAD
+
+
+def test_resource_limit_reports_specific_resource():
+    net = parse_bnet("targets, factors\na, !a\nb, a\n")
+    runner = make_runner(net, 0, mode=SamplingMode.ASYNC_UNIFORM)
+    condition = parse_condition("Inf(1x)", net)
+    result = symbolic_verdict(condition, runner, state=0, max_nodes=1)
+    assert isinstance(result, Undecided)
+    assert result.reason is UndecidedReason.RESOURCE_LIMIT
+    assert result.resource in set(Resource)
+    assert result.detail

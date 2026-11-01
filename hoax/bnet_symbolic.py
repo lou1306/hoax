@@ -9,13 +9,14 @@ BDD fixpoints.  The result is a three-valued prefix verdict:
 * ``BAD``: every infinite extension violates it;
 * ``UGLY``: both kinds of extension exist and every reachable bottom SCC is
   itself mixed (a closed accepting-and-rejecting class the walk cannot leave).
-* ``Undecided.INDETERMINATE``: both kinds of extension exist but some reachable
-  bottom SCC is fully good or fully bad, so a continuation could still resolve
-  the outcome.
+* ``Undecided(INDETERMINATE)``: both kinds of extension exist but some
+  reachable bottom SCC is fully good or fully bad, so a continuation could
+  still resolve the outcome.
 
-``Undecided`` marks a non-verdict outcome.  ``Undecided.INCONCLUSIVE`` is a
-structural non-decision; ``Undecided.TIMEOUT`` means the analysis did not
-finish within its budget.  Neither is an ``UNKNOWN`` verdict.
+``Undecided`` marks a non-verdict outcome.  ``Undecided(INCONCLUSIVE)`` is a
+structural non-decision; ``Undecided(RESOURCE_LIMIT, resource, detail)`` means
+the analysis hit a time, BDD-node, BDD-memory, SCC, or iteration budget.
+Neither is an ``UNKNOWN`` verdict.
 """
 
 from __future__ import annotations
@@ -31,7 +32,13 @@ from oxidd.util import DDMemoryError
 from .bnet import BNet, Expr, And as ExprAnd, Const, Not, Or as ExprOr, Var
 from .bnet_acceptance import (And, Condition, Fin, Inf, Or, Pattern)
 from .bnet_runner import SamplingMode
-from .verdict import PrefixType, Undecided
+from .verdict import (
+    PrefixType,
+    Resource,
+    Undecided,
+    UndecidedReason,
+    Verdict,
+)
 
 DEFAULT_MAX_NODES = 1_000_000
 DEFAULT_MAX_SECONDS = 10.0
@@ -47,6 +54,11 @@ DEFAULT_CELL_CACHE_SIZE = 4_096
 
 class SymbolicBudgetExceeded(RuntimeError):
     """Raised internally when a BDD analysis exceeds its configured budget."""
+
+    def __init__(self, resource: Resource, detail: str) -> None:
+        super().__init__(detail)
+        self.resource = resource
+        self.detail = detail
 
 
 def _merge_row(row: tuple[Fin | Inf, ...]) -> tuple[Fin | Inf, ...]:
@@ -469,11 +481,17 @@ class SymbolicEngine:
     def _check_budget(self) -> None:
         self._iterations += 1
         if self._iterations > self.max_iterations:
-            raise SymbolicBudgetExceeded("iteration budget exhausted")
+            raise SymbolicBudgetExceeded(
+                Resource.ITERATIONS,
+                f"iteration budget exhausted ({self.max_iterations})")
         if time.monotonic() > self._deadline:
-            raise SymbolicBudgetExceeded("time budget exhausted")
+            raise SymbolicBudgetExceeded(
+                Resource.TIME,
+                f"wall-clock budget exhausted ({self.max_seconds:g}s)")
         if self.cell.num_inner_nodes() > self.cell.max_nodes:
-            raise SymbolicBudgetExceeded("BDD node budget exhausted")
+            raise SymbolicBudgetExceeded(
+                Resource.BDD_NODES,
+                f"BDD node budget exhausted ({self.cell.max_nodes} nodes)")
 
     def post(self, states: BDDFunction) -> BDDFunction:
         """Image of ``states`` under the transition relation."""
@@ -543,7 +561,9 @@ class SymbolicEngine:
             remaining &= ~component
             scc_count += 1
             if scc_count > self.max_sccs:
-                raise SymbolicBudgetExceeded("SCC budget exhausted")
+                raise SymbolicBudgetExceeded(
+                    Resource.SCCS,
+                    f"SCC budget exhausted ({self.max_sccs})")
             if not (self.post(component) & ~component).satisfiable():
                 bottoms.append(component)
         return bottoms
@@ -625,7 +645,9 @@ class SymbolicEngine:
             remaining &= ~component
             scc_count += 1
             if scc_count > self.max_sccs:
-                raise SymbolicBudgetExceeded("SCC budget exhausted")
+                raise SymbolicBudgetExceeded(
+                    Resource.SCCS,
+                    f"SCC budget exhausted ({self.max_sccs})")
         return False
 
     def sat_some_term(self, term: Sequence[Fin | Inf],
@@ -647,14 +669,14 @@ class SymbolicEngine:
             return False
         return self._scc_satisfies(outside, inf_sets)
 
-    def verdict(self, condition: Condition) -> PrefixType | Undecided:
+    def verdict(self, condition: Condition) -> Verdict:
         """Exact three-valued verdict for the current prefix.
 
         ``GOOD``/``BAD`` are terminal (the dual extension does not exist).
         When both kinds of extension exist the outcome is mixed: it is
         terminal ``UGLY`` only if *every* reachable bottom SCC is itself mixed
         (irreversibly undecided); otherwise it is the transient non-decision
-        ``Undecided.INDETERMINATE`` (a continuation could still settle into a
+        ``Undecided(INDETERMINATE)`` (a continuation could still settle into a
         fully good or fully bad class, resolving it to GOOD or BAD).
         """
         rows = _row_terms(condition)
@@ -664,7 +686,7 @@ class SymbolicEngine:
         if some and some_dual:
             if self._all_bottom_sccs_mixed(rows, dual_rows):
                 return PrefixType.UGLY
-            return Undecided.INDETERMINATE
+            return Undecided(UndecidedReason.INDETERMINATE)
         if some:
             return PrefixType.GOOD
         if some_dual:
@@ -672,7 +694,7 @@ class SymbolicEngine:
         # With the sink self-loop there is always an infinite path, so this is
         # unreachable for a well-formed condition.  Treat it as structurally
         # undecided rather than inventing an UNKNOWN verdict.
-        return Undecided.INCONCLUSIVE
+        return Undecided(UndecidedReason.INCONCLUSIVE)
 
 
 def symbolic_verdict(condition: Condition, runner,
@@ -681,11 +703,12 @@ def symbolic_verdict(condition: Condition, runner,
                      max_seconds: float = DEFAULT_MAX_SECONDS,
                      max_sccs: int = DEFAULT_MAX_SCCS,
                      max_iterations: int = DEFAULT_MAX_ITERATIONS
-                     ) -> PrefixType | Undecided:
-    """Run the exact BDD check, returning ``Undecided.TIMEOUT`` if the budget
-    is exhausted, ``Undecided.INCONCLUSIVE`` for a structural non-decision and
-    ``Undecided.INDETERMINATE`` when both extensions exist but some reachable
-    bottom SCC is clean (so a continuation could still resolve it).
+                     ) -> Verdict:
+    """Run the exact BDD check, returning a ``PrefixType`` or ``Undecided``.
+
+    A resource-limit non-decision carries the exhausted ``Resource`` and the
+    concrete detail message, e.g. ``Undecided(UndecidedReason.RESOURCE_LIMIT,
+    Resource.BDD_NODES, "...")``.
     """
     if state is None:
         state = runner.state
@@ -701,6 +724,7 @@ def symbolic_verdict(condition: Condition, runner,
         if candidate not in orders:
             orders.append(candidate)
 
+    last_limit: Undecided | None = None
     for order in orders:
         try:
             engine = SymbolicEngine(
@@ -708,6 +732,12 @@ def symbolic_verdict(condition: Condition, runner,
                 order, max_nodes=max_nodes, max_seconds=max_seconds,
                 max_sccs=max_sccs, max_iterations=max_iterations)
             return engine.verdict(condition)
-        except (SymbolicBudgetExceeded, DDMemoryError):
-            continue
-    return Undecided.TIMEOUT
+        except SymbolicBudgetExceeded as exc:
+            last_limit = Undecided(
+                UndecidedReason.RESOURCE_LIMIT, exc.resource, exc.detail)
+        except DDMemoryError as exc:
+            last_limit = Undecided(
+                UndecidedReason.RESOURCE_LIMIT,
+                Resource.BDD_MEMORY, str(exc))
+    assert last_limit is not None
+    return last_limit

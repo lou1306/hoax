@@ -12,17 +12,27 @@ A prefix is
   reachable bottom SCC is itself mixed* (the walk must eventually settle in a
   closed mixed class, so the outcome can never be resolved).
 
-``None`` is not a verdict: it means the monitor has not decided yet.
+``Undecided`` is the non-verdict side of the result type.  It records *why* an
+exact symbolic check stopped without a decision:
 
-``Undecided`` is likewise not a verdict: it reports *why* an exact symbolic
-check stopped without a decision.  ``Undecided.INCONCLUSIVE`` means the
-condition is structurally undecidable from the prefix; ``Undecided.TIMEOUT``
-means the analysis hit its budget; ``Undecided.INDETERMINATE`` means both an
-accepting and a rejecting extension still exist but some reachable bottom SCC
-is fully good or fully bad, so a continuation could resolve it to GOOD or BAD.
+* ``INCONCLUSIVE`` -- structurally undecidable from the prefix;
+* ``INDETERMINATE`` -- both accepting and rejecting extensions still exist, but
+  some reachable bottom SCC is fully good or fully bad, so a continuation could
+  resolve it;
+* ``RESOURCE_LIMIT`` -- the analysis hit a resource budget (time, BDD nodes,
+  BDD memory, SCCs, or iterations);
+* ``BACKEND_UNAVAILABLE`` -- the symbolic backend is not installed.
+
+The concrete resource is carried in ``Undecided.resource`` and the human-readable
+reason in ``Undecided.detail``.  There is deliberately no single
+``Undecided.RESOURCE_LIMIT`` constant: construct the object with the resource
+that was exhausted.
 """
 
-from enum import Enum
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum, StrEnum
 
 
 class PrefixType(Enum):
@@ -38,15 +48,33 @@ class PrefixType(Enum):
         return self
 
 
-class Undecided(Enum):
-    """Why an exact symbolic check ended without a three-valued verdict.
+class UndecidedReason(StrEnum):
+    INCONCLUSIVE = "inconclusive"
+    INDETERMINATE = "indeterminate"
+    RESOURCE_LIMIT = "resource-limit"
+    BACKEND_UNAVAILABLE = "backend-unavailable"
 
-    ``TIMEOUT`` and ``INCONCLUSIVE`` are treated identically by the monitor
-    (both are cached and never recomputed), but ``TIMEOUT`` is tracked so a
-    definitive-but-inconclusive trace can warn that it might be GOOD or BAD.
-    ``INDETERMINATE`` is also cached and never recomputed, and is distinct from
-    a timeout: it is a genuine (transient) non-decision, not a budget failure.
-    """
-    INCONCLUSIVE = 0  # structurally undecidable from the prefix
-    TIMEOUT = 1       # budget exhausted (transient in principle)
-    INDETERMINATE = 2  # both extensions exist, but some bottom SCC is clean
+
+class Resource(StrEnum):
+    TIME = "time"
+    BDD_NODES = "bdd-nodes"
+    BDD_MEMORY = "bdd-memory"
+    SCCS = "sccs"
+    ITERATIONS = "iterations"
+
+
+@dataclass(frozen=True, slots=True)
+class Undecided:
+    """A non-verdict outcome, with an optional resource and detail."""
+
+    reason: UndecidedReason
+    resource: Resource | None = None
+    detail: str | None = None
+
+    def __str__(self) -> str:
+        if self.resource is not None:
+            return f"{self.reason.value} ({self.resource.value}): {self.detail}"
+        return f"{self.reason.value}: {self.detail}"
+
+
+Verdict = PrefixType | Undecided

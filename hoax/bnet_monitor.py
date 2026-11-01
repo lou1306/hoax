@@ -5,6 +5,10 @@ imported lazily, only when an acceptance condition is actually being watched.
 It first tries the cheap, sound interaction-graph rules from
 :mod:`hoax.bnet_acceptance`; when those are inconclusive it falls back to the
 exact BDD analysis in :mod:`hoax.bnet_symbolic`.
+
+``check`` always returns a :data:`~hoax.verdict.Verdict`: either a
+:class:`~hoax.verdict.PrefixType` or an :class:`~hoax.verdict.Undecided` with a
+reason, and, for resource limits, the specific ``Resource`` and detail message.
 """
 
 from __future__ import annotations
@@ -14,7 +18,12 @@ from typing import TYPE_CHECKING, Optional
 from cachetools import LRUCache
 
 from .bnet_acceptance import Condition
-from .verdict import PrefixType, Undecided
+from .verdict import (
+    PrefixType,
+    Undecided,
+    UndecidedReason,
+    Verdict,
+)
 
 if TYPE_CHECKING:
     from .bnet_runner import BnetRunner
@@ -29,9 +38,8 @@ class BnetMonitor:
             raise ValueError("cache_size must be at least 1")
         self.condition = condition
         self.runner = runner
-        self._state_verdict_cache: LRUCache[int, PrefixType | Undecided] = (
+        self._state_verdict_cache: LRUCache[int, Verdict] = (
             LRUCache(maxsize=cache_size))
-        self._timeout_occurred = False
 
     def _is_terminal(self, state: int) -> bool:
         """Whether no positive-probability transition leaves ``state``."""
@@ -45,17 +53,13 @@ class BnetMonitor:
         """Exact verdict when the run cannot leave ``state``."""
         return self.condition.terminal(state)
 
-    @property
-    def timeout_occurred(self) -> bool:
-        """Whether any exact check reported ``Undecided.TIMEOUT`` in this run."""
-        return self._timeout_occurred
+    def check(self, state: Optional[int] = None) -> Verdict:
+        """Return a decided verdict or an ``Undecided`` reason.
 
-    def check(self, state: Optional[int] = None) -> Optional[PrefixType]:
-        """Return a verdict for the current prefix, or ``None``.
-
-        A terminal state is classified exactly from the condition's
-        terminal rule.  Otherwise the cheap interaction-graph rules run first;
-        an exact BDD analysis is only attempted when they are inconclusive.
+        A terminal state is classified exactly from the condition's terminal
+        rule.  Otherwise the cheap interaction-graph rules run first; an exact
+        BDD analysis is only attempted when they are inconclusive.  The result
+        is cached per visited state, including non-verdicts.
         """
         if state is None:
             state = self.runner.state
@@ -63,26 +67,24 @@ class BnetMonitor:
 
         cached = self._state_verdict_cache.get(state)
         if cached is not None:
-            # cached is a PrefixType or an Undecided marker (never None).
-            return None if isinstance(cached, Undecided) else cached
+            return cached
 
-        if self._is_terminal(state):
-            return self.terminal(state)
+        if self.is_terminal(state):
+            result: Verdict = self.terminal(state)
+        else:
+            local = self.condition.check(self.runner)
+            if local is not None:
+                result = local
+            else:
+                try:
+                    from .bnet_symbolic import symbolic_verdict
+                except ModuleNotFoundError:
+                    result = Undecided(
+                        UndecidedReason.BACKEND_UNAVAILABLE,
+                        detail="symbolic backend (oxidd) is not installed")
+                else:
+                    result = symbolic_verdict(
+                        self.condition, self.runner, state=state)
 
-        local = self.condition.check(self.runner)
-        if local is not None:
-            return local
-
-        try:
-            from .bnet_symbolic import symbolic_verdict
-        except ModuleNotFoundError:
-            # oxidd is not available: stay conservative and report no verdict.
-            return None
-        result = symbolic_verdict(self.condition, self.runner, state=state)
-        if isinstance(result, Undecided):
-            if result is Undecided.TIMEOUT:
-                self._timeout_occurred = True
-            self._state_verdict_cache[state] = result
-            return None
         self._state_verdict_cache[state] = result
         return result

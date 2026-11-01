@@ -22,6 +22,7 @@ from cachetools import LRUCache
 from .bnet import BNet, SteadyState, parse_bnet_file, vars_of
 from .drivers import Driver, RandomDriver
 from .util import PRG_SEED, PRG_UNIFORM, logger
+from .verdict import PrefixType, Undecided
 
 if TYPE_CHECKING:
     # Import for type checking only: hoax.runners pulls in networkit and the
@@ -455,6 +456,7 @@ def main() -> None:
 
         x = 0
         verdict_seen = False
+        resource_limits: set[str] = set()
         for x in range(1, bound + 1):
             sys.stdout.write(format_state(net, runner.state) + "\n")
 
@@ -466,12 +468,14 @@ def main() -> None:
                     verdict_seen = True
                 break
 
-            if monitor is not None and not monitor.is_terminal(runner.state):
-                verdict = monitor.check(runner.state)
-                if verdict is not None:
-                    print(f"Acceptance: {verdict.name}", file=sys.stderr)
+            if monitor is not None:
+                result = monitor.check(runner.state)
+                if isinstance(result, PrefixType):
+                    print(f"Acceptance: {result.name}", file=sys.stderr)
                     verdict_seen = True
                     break
+                if isinstance(result, Undecided) and result.resource is not None:
+                    resource_limits.add(result.resource.value)
 
             try:
                 runner.step()
@@ -488,9 +492,11 @@ def main() -> None:
             # The condition was not decided within the step bound.  This is a
             # non-verdict, not an UNKNOWN.
             print("No acceptance verdict.", file=sys.stderr)
-            if monitor.timeout_occurred:
-                print("Acceptance may be GOOD/BAD: an exact check timed out, "
-                      "so this trace is inconclusive.", file=sys.stderr)
+            if resource_limits:
+                limits = ", ".join(sorted(resource_limits))
+                print(f"Acceptance may be GOOD/BAD: resource limit(s) hit "
+                      f"({limits}), so this trace is inconclusive.",
+                      file=sys.stderr)
         toc = datetime.now()
         print(f"hoax,{network.stem},{x},{toc - tic}", file=sys.stderr)
 
